@@ -48,7 +48,9 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 .ex-bold { font-weight: 700; }
 .ex-under { text-decoration: underline; text-underline-offset: 3px; }
 .ex-mark { background: linear-gradient(transparent 60%, rgba(201,166,107,0.35) 60%); font-weight: 500; }
-.ex-heading { font-weight: 700; color: var(--crust-dark); border-left: 3px solid var(--crust); padding-left: 8px; }
+.ex-heading { display: inline-flex; align-items: baseline; gap: 8px; font-family: "Shippori Mincho", "Hiragino Mincho ProN", serif; font-weight: 700; color: var(--ink); font-size: 15px; padding-bottom: 6px; border-bottom: 1px solid var(--line); position: relative; }
+.ex-heading::after { content: ""; position: absolute; left: 0; bottom: -1px; width: 32px; height: 2px; background: var(--crust); }
+.ex-heading .ex-n { color: var(--crust-dark); }
 .ex-quote { background: var(--paper); border: 1px solid var(--line); border-top: 3px solid var(--crust); border-radius: 2px; padding: 8px 10px; text-align: center; font-weight: 700; color: var(--crust-dark); font-size: 13px; }
 .modal-actions { margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end; }
 .btn { padding: 10px 20px; border-radius: 6px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; }
@@ -171,7 +173,7 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
     <h3>入力方法 早見表</h3>
     <table>
       <tr><th>装飾</th><th>やり方</th><th>こう表示されます</th></tr>
-      <tr><td>見出し</td><td>「見出し」欄に<br>入力</td><td><span class="ex-heading">新しい門出</span></td></tr>
+      <tr><td>見出し</td><td>「見出し」欄に<br>入力</td><td><span class="ex-heading"><span class="ex-n">1.</span>新しい門出</span></td></tr>
       <tr><td>太字</td><td>文字を選んで<br>「太字」</td><td><span class="ex-bold">大切な一日</span></td></tr>
       <tr><td>下線</td><td>文字を選んで<br>「下線」</td><td><span class="ex-under">大切な一日</span></td></tr>
       <tr><td>マーカー</td><td>文字を選んで<br>「マーカー」</td><td><span class="ex-mark">大切な一日</span></td></tr>
