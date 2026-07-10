@@ -27,13 +27,13 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 /* ── フォーム ── */
 .field { margin-bottom: 20px; }
 .field label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-soft); margin-bottom: 6px; }
-.field input[type=text], .field textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font-family: inherit; font-size: 14px; color: var(--ink); }
-.field textarea { min-height: 320px; line-height: 1.9; resize: vertical; }
+.field input[type=text] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font-family: inherit; font-size: 14px; color: var(--ink); }
 .row { display: flex; gap: 16px; flex-wrap: wrap; }
 .row .field { flex: 1; min-width: 160px; }
 .char-count { text-align: right; font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
 .help-btn { display: inline-block; font-size: 12px; padding: 6px 14px; border: 1px solid var(--crust); color: var(--crust-dark); background: #fff; border-radius: 20px; cursor: pointer; margin-bottom: 14px; }
 .line-note { font-size: 12px; color: var(--ink-soft); background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; margin-top: 24px; }
+.section-label { font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 24px 0 10px; }
 
 /* ── 右クリックメニュー ── */
 .deco-menu { position: absolute; z-index: 200; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(58,42,30,0.2); overflow: hidden; display: none; }
@@ -54,13 +54,19 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 .btn.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.danger { background: var(--berry); border-color: var(--berry); color: #fff; }
 
-/* ── 写真設定 ── */
-.section-photo-card { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #fff; }
-.section-photo-card h4 { font-size: 14px; margin-bottom: 10px; }
-.photo-thumb-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+/* ── 見出しブロック ── */
+.block-card { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 18px; background: #fff; }
+.block-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.block-icon { font-size: 22px; cursor: pointer; user-select: none; flex-shrink: 0; padding: 2px 4px; border-radius: 6px; }
+.block-icon:hover { background: var(--paper); }
+.block-heading-input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-family: inherit; font-size: 14px; background: #fff; color: var(--ink); }
+.block-remove-btn { flex-shrink: 0; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--berry); color: var(--berry); background: #fff; cursor: pointer; font-size: 12px; font-family: inherit; }
+.block-body-input { width: 100%; min-height: 160px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; font-family: inherit; font-size: 14px; line-height: 1.9; resize: vertical; color: var(--ink); }
+.block-photo-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+.add-block-btn { width: 100%; padding: 14px; border: 2px dashed var(--crust); border-radius: 8px; background: none; color: var(--crust-dark); font-weight: 700; cursor: pointer; font-family: inherit; font-size: 14px; margin-bottom: 20px; }
 .photo-thumb { position: relative; width: 100px; }
 .photo-thumb img { width: 100px; height: 100px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
-.photo-thumb input[type=text] { width: 100%; margin-top: 4px; font-size: 11px; padding: 4px 6px; }
+.photo-thumb input[type=text] { width: 100%; margin-top: 4px; font-size: 11px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; font-family: inherit; }
 .photo-thumb .rm-btn { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--berry); color: #fff; border: none; cursor: pointer; font-size: 12px; line-height: 1; }
 .photo-upload-note { font-size: 11px; color: var(--ink-soft); }
 .err-text { color: var(--berry); font-size: 12px; margin-top: 6px; }
@@ -84,16 +90,15 @@ table.history-table th { background: var(--paper); }
 
 <div class="wrap">
   <h1 class="app-title">社長日記 投稿ツール</h1>
-  <div class="app-sub">タイトル・本文・写真を入れて「掲載する」を押すだけで公開されます</div>
+  <div class="app-sub">見出し・本文・写真を入れて「掲載する」を押すだけで公開されます</div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="input">① 本文入力</button>
-    <button class="tab-btn" data-tab="photo">② 写真設定</button>
-    <button class="tab-btn" data-tab="preview">③ プレビュー・掲載</button>
-    <button class="tab-btn" data-tab="history">④ 掲載履歴</button>
+    <button class="tab-btn active" data-tab="input">① 記事作成</button>
+    <button class="tab-btn" data-tab="preview">② プレビュー・掲載</button>
+    <button class="tab-btn" data-tab="history">③ 掲載履歴</button>
   </div>
 
-  <!-- ══ 画面1: 本文入力 ══ -->
+  <!-- ══ 画面1: 記事作成 ══ -->
   <div class="tab-panel active" id="panel-input">
     <button class="help-btn" id="helpBtn">📖 入力方法を見る</button>
     <div class="row">
@@ -110,24 +115,13 @@ table.history-table th { background: var(--paper); }
       <label>サブタイトル(英語・任意)</label>
       <input type="text" id="subtitleInput" placeholder="the day I knocked on the door of my dream">
     </div>
-    <div class="field">
-      <label>本文(見出しは行頭で「見出しにする」を使うと自動で ## が付きます)</label>
-      <textarea id="bodyInput" placeholder="ここに本文を入力してください。文字を選択して右クリック(スマホは長押し)すると装飾メニューが出ます。"></textarea>
-      <div class="char-count" id="charCount">0文字</div>
-    </div>
+
+    <div class="section-label">見出しブロック(見出し・本文・写真を1セットとして必要な分だけ追加してください)</div>
+    <div id="blocksContainer"></div>
+    <button class="add-block-btn" id="addBlockBtn">＋ 見出しを追加</button>
   </div>
 
-  <!-- ══ 画面2: 写真設定 ══ -->
-  <div class="tab-panel" id="panel-photo">
-    <p style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">
-      本文中の見出し(##)ごとに写真を割り当てます。記事全体で最大4枚、1見出しにつき1〜2枚までです。
-      対応形式は jpg / png のみ、1枚あたり5MB以下です。写真は各見出しの本文末尾に挿入されます。
-    </p>
-    <div id="totalPhotoCount" style="font-size:13px;font-weight:600;margin-bottom:14px;"></div>
-    <div id="photoSections"></div>
-  </div>
-
-  <!-- ══ 画面3: プレビュー・掲載 ══ -->
+  <!-- ══ 画面2: プレビュー・掲載 ══ -->
   <div class="tab-panel" id="panel-preview">
     <p style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;">
       実際に公開されるページと同じ見た目でプレビューされます。修正がなければ「掲載する」を押してください。
@@ -144,7 +138,7 @@ table.history-table th { background: var(--paper); }
     <div class="line-note">不具合等ございましたらLINEにてご連絡ください。</div>
   </div>
 
-  <!-- ══ 画面4: 掲載履歴 ══ -->
+  <!-- ══ 画面3: 掲載履歴 ══ -->
   <div class="tab-panel" id="panel-history">
     <a class="sheet-link" id="sheetLink" href="#" target="_blank" rel="noopener">📊 スプレッドシートを開く</a>
     <div id="historyBox">読み込み中...</div>
@@ -157,7 +151,6 @@ table.history-table th { background: var(--paper); }
   <button data-act="under">下線</button>
   <button data-act="mark">マーカー</button>
   <button data-act="quote">引用(四角囲み)</button>
-  <button data-act="heading">見出しにする</button>
 </div>
 
 <!-- 入力方法 早見表モーダル -->
@@ -165,11 +158,12 @@ table.history-table th { background: var(--paper); }
   <div class="modal-box">
     <h3>入力方法 早見表</h3>
     <table>
-      <tr><td>太字</td><td>文字を選択して右クリック(長押し)→「太字」</td></tr>
-      <tr><td>下線</td><td>文字を選択して右クリック(長押し)→「下線」</td></tr>
-      <tr><td>マーカー</td><td>文字を選択して右クリック(長押し)→「マーカー」</td></tr>
-      <tr><td>引用(四角囲み)</td><td>文字を選択して右クリック(長押し)→「引用」</td></tr>
-      <tr><td>見出しにする</td><td>何も選択せず行にカーソルを置いた状態で右クリック(長押し)→「見出しにする」</td></tr>
+      <tr><td>見出し</td><td>各ブロック上部の「見出し」欄に直接入力します</td></tr>
+      <tr><td>太字</td><td>本文の文字を選択して右クリック(長押し)→「太字」</td></tr>
+      <tr><td>下線</td><td>本文の文字を選択して右クリック(長押し)→「下線」</td></tr>
+      <tr><td>マーカー</td><td>本文の文字を選択して右クリック(長押し)→「マーカー」</td></tr>
+      <tr><td>引用(四角囲み)</td><td>本文の文字を選択して右クリック(長押し)→「引用」</td></tr>
+      <tr><td>見出しの追加</td><td>「＋ 見出しを追加」ボタンでブロックを増やせます</td></tr>
     </table>
     <div class="modal-actions"><button class="btn primary" id="closeHelpBtn">閉じる</button></div>
   </div>
@@ -197,7 +191,7 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycby38HVzWe57GxCf5SQl-9Au
 const SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1XPMwWYqNSrJLu7x8RCmX4JGaaU1UE-Ep9v-w5bxC1rs/edit";
 const TEMPLATE_PATH = "template/article-template.html";
 const ICONS = ["🍞", "🌱", "✨", "💭", "📖", "🌸", "☀️", "🕊️", "🍂", "🎋"];
-const DRAFT_KEY = "shachonikki_draft_v1";
+const DRAFT_KEY = "shachonikki_draft_v2";
 const MAX_PHOTOS_TOTAL = 4;
 const MAX_PHOTOS_PER_SECTION = 2;
 const MAX_PHOTO_MB = 5;
@@ -209,14 +203,13 @@ let state = {
   volNo: "",
   title: "",
   subtitleEn: "",
-  body: "",
-  sectionPhotos: {},   // { sectionIndex: [{id, dataUrl, caption}] }
-  sectionIcons: {},    // { sectionIndex: emoji }  (タップで変更した場合のみ)
+  blocks: [],   // [{ id, heading, body, icon, photos: [{id, dataUrl, caption}] }]
   published: false,
   publishedUrl: "",
 };
 let templateCache = null;
 let saveTimer = null;
+let activeTextarea = null;
 
 /* ════════════════════════════════════════════════
    ユーティリティ
@@ -235,11 +228,16 @@ function showToast(msg, ok) {
   clearTimeout(t._timer);
   t._timer = setTimeout(() => { t.classList.remove("show"); }, 4000);
 }
+function makeBlock() {
+  return { id: "blk" + Date.now() + Math.random().toString(36).slice(2, 6), heading: "", body: "", icon: null, photos: [] };
+}
+function findBlock(id) { return state.blocks.find(b => b.id === id); }
 function setInputsDisabled(disabled) {
-  ["volNoInput", "titleInput", "subtitleInput", "bodyInput"].forEach(id => {
+  ["volNoInput", "titleInput", "subtitleInput"].forEach(id => {
     document.getElementById(id).disabled = disabled;
   });
-  document.querySelectorAll("#photoSections input, #photoSections button").forEach(el => el.disabled = disabled);
+  document.querySelectorAll("#blocksContainer input, #blocksContainer textarea, #blocksContainer button").forEach(el => el.disabled = disabled);
+  document.getElementById("addBlockBtn").disabled = disabled;
 }
 
 /* ════════════════════════════════════════════════
@@ -251,119 +249,216 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
     btn.classList.add("active");
     document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
-    if (btn.dataset.tab === "photo") renderPhotoSections();
     if (btn.dataset.tab === "preview") refreshPreview();
     if (btn.dataset.tab === "history") loadHistory();
   });
 });
 
 /* ════════════════════════════════════════════════
-   本文入力・装飾メニュー
+   基本情報入力
    ════════════════════════════════════════════════ */
-const bodyInput = document.getElementById("bodyInput");
 const volNoInput = document.getElementById("volNoInput");
 const titleInput = document.getElementById("titleInput");
 const subtitleInput = document.getElementById("subtitleInput");
-const charCount = document.getElementById("charCount");
 const decoMenu = document.getElementById("decoMenu");
 
 function syncStateFromForm() {
   state.volNo = volNoInput.value.trim();
   state.title = titleInput.value;
   state.subtitleEn = subtitleInput.value;
-  state.body = bodyInput.value;
-}
-function updateCharCount() {
-  charCount.textContent = bodyInput.value.length + "文字";
 }
 [volNoInput, titleInput, subtitleInput].forEach(el => {
   el.addEventListener("input", () => { syncStateFromForm(); scheduleAutosave(); });
 });
-bodyInput.addEventListener("input", () => {
-  syncStateFromForm(); updateCharCount(); scheduleAutosave();
+
+/* ════════════════════════════════════════════════
+   見出しブロックの描画
+   ════════════════════════════════════════════════ */
+function renderBlocks() {
+  const container = document.getElementById("blocksContainer");
+  container.innerHTML = "";
+
+  state.blocks.forEach((blk, idx) => {
+    const icon = blk.icon || ICONS[idx % ICONS.length];
+    const card = document.createElement("div");
+    card.className = "block-card";
+    card.dataset.id = blk.id;
+    card.innerHTML = `
+      <div class="block-card-header">
+        <span class="block-icon" data-id="${blk.id}" title="タップでアイコン変更">${icon}</span>
+        <input type="text" class="block-heading-input" data-id="${blk.id}" placeholder="見出し(例: 新しい門出)" value="${escapeAttr(blk.heading)}">
+        <button class="block-remove-btn" data-id="${blk.id}">削除</button>
+      </div>
+      <textarea class="block-body-input" data-id="${blk.id}" placeholder="この見出しの本文を入力してください。文字を選択して右クリック(スマホは長押し)すると装飾メニューが出ます。">${escapeHtml(blk.body)}</textarea>
+      <div class="char-count" data-id="${blk.id}">${blk.body.length}文字</div>
+      <div class="block-photo-row" id="thumbs-${blk.id}"></div>
+      <label class="btn" style="display:inline-block;">
+        写真を追加
+        <input type="file" accept="image/jpeg,image/png" style="display:none;" data-id="${blk.id}">
+      </label>
+      <div class="photo-upload-note">jpg/png のみ・5MB以下・1見出しにつき最大2枚</div>
+      <div class="err-text" id="err-${blk.id}"></div>
+    `;
+    container.appendChild(card);
+
+    const thumbRow = card.querySelector(`#thumbs-${blk.id}`);
+    blk.photos.forEach(p => {
+      const thumb = document.createElement("div");
+      thumb.className = "photo-thumb";
+      thumb.innerHTML = `
+        <img src="${p.dataUrl}">
+        <button class="rm-btn" data-id="${blk.id}" data-pid="${p.id}">×</button>
+        <input type="text" placeholder="キャプション(任意)" value="${escapeAttr(p.caption || "")}" data-id="${blk.id}" data-pid="${p.id}">
+      `;
+      thumbRow.appendChild(thumb);
+    });
+  });
+
+  bindBlockEvents();
+}
+
+function bindBlockEvents() {
+  const container = document.getElementById("blocksContainer");
+
+  container.querySelectorAll(".block-heading-input").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const blk = findBlock(inp.dataset.id);
+      if (blk) blk.heading = inp.value;
+      scheduleAutosave();
+    });
+  });
+
+  container.querySelectorAll(".block-body-input").forEach(ta => {
+    ta.addEventListener("input", () => {
+      const blk = findBlock(ta.dataset.id);
+      if (blk) blk.body = ta.value;
+      const cc = container.querySelector(`.char-count[data-id="${ta.dataset.id}"]`);
+      if (cc) cc.textContent = ta.value.length + "文字";
+      scheduleAutosave();
+    });
+    ta.addEventListener("contextmenu", (e) => {
+      const hasSelection = ta.selectionStart !== ta.selectionEnd;
+      if (!hasSelection) return;
+      e.preventDefault();
+      activeTextarea = ta;
+      openDecoMenu(e.pageX, e.pageY);
+    });
+    let touchTimer = null;
+    ta.addEventListener("touchstart", (e) => {
+      touchTimer = setTimeout(() => {
+        const hasSelection = ta.selectionStart !== ta.selectionEnd;
+        if (!hasSelection) return;
+        activeTextarea = ta;
+        const t = e.touches[0];
+        openDecoMenu(t.pageX, t.pageY);
+      }, 550);
+    });
+    ta.addEventListener("touchend", () => clearTimeout(touchTimer));
+    ta.addEventListener("touchmove", () => clearTimeout(touchTimer));
+  });
+
+  container.querySelectorAll(".block-icon").forEach(span => {
+    span.addEventListener("click", () => {
+      const blk = findBlock(span.dataset.id);
+      if (!blk) return;
+      const idx = state.blocks.indexOf(blk);
+      const currentIcon = blk.icon || ICONS[idx % ICONS.length];
+      const pos = ICONS.indexOf(currentIcon);
+      blk.icon = ICONS[(pos + 1) % ICONS.length];
+      span.textContent = blk.icon;
+      scheduleAutosave();
+    });
+  });
+
+  container.querySelectorAll(".block-remove-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const blk = findBlock(btn.dataset.id);
+      if (!blk) return;
+      if (blk.photos.length > 0 && !confirm("この見出しには写真が設定されています。削除してもよろしいですか?")) return;
+      state.blocks = state.blocks.filter(b => b.id !== blk.id);
+      renderBlocks();
+      scheduleAutosave();
+    });
+  });
+
+  container.querySelectorAll('input[type=file]').forEach(inp => {
+    inp.addEventListener("change", (e) => handlePhotoUpload(inp.dataset.id, e));
+  });
+
+  container.querySelectorAll(".rm-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const blk = findBlock(btn.dataset.id);
+      if (!blk) return;
+      blk.photos = blk.photos.filter(p => p.id !== btn.dataset.pid);
+      renderBlocks();
+      scheduleAutosave();
+    });
+  });
+
+  container.querySelectorAll('.photo-thumb input[type=text]').forEach(inp => {
+    inp.addEventListener("input", () => {
+      const blk = findBlock(inp.dataset.id);
+      const p = blk && blk.photos.find(p => p.id === inp.dataset.pid);
+      if (p) p.caption = inp.value;
+      scheduleAutosave();
+    });
+  });
+}
+
+document.getElementById("addBlockBtn").addEventListener("click", () => {
+  state.blocks.push(makeBlock());
+  renderBlocks();
+  scheduleAutosave();
+  const headingInputs = document.querySelectorAll(".block-heading-input");
+  if (headingInputs.length) headingInputs[headingInputs.length - 1].focus();
 });
 
+/* ════════════════════════════════════════════════
+   装飾メニュー(選択中のブロック本文に適用)
+   ════════════════════════════════════════════════ */
 function hideDecoMenu() { decoMenu.style.display = "none"; }
 document.addEventListener("click", (e) => { if (!decoMenu.contains(e.target)) hideDecoMenu(); });
 
-function openDecoMenu(x, y, hasSelection) {
-  decoMenu.querySelectorAll("button").forEach(b => {
-    b.disabled = (b.dataset.act !== "heading" && !hasSelection);
-  });
+function openDecoMenu(x, y) {
   decoMenu.style.left = Math.min(x, window.innerWidth - 200) + "px";
   decoMenu.style.top = y + "px";
   decoMenu.style.display = "block";
 }
 
-bodyInput.addEventListener("contextmenu", (e) => {
-  e.preventDefault();
-  const hasSelection = bodyInput.selectionStart !== bodyInput.selectionEnd;
-  openDecoMenu(e.pageX, e.pageY, hasSelection);
-});
-
-// スマホ長押し対応
-let touchTimer = null;
-bodyInput.addEventListener("touchstart", (e) => {
-  touchTimer = setTimeout(() => {
-    const hasSelection = bodyInput.selectionStart !== bodyInput.selectionEnd;
-    const t = e.touches[0];
-    openDecoMenu(t.pageX, t.pageY, hasSelection);
-  }, 550);
-});
-bodyInput.addEventListener("touchend", () => clearTimeout(touchTimer));
-bodyInput.addEventListener("touchmove", () => clearTimeout(touchTimer));
-
 function wrapSelection(prefix, suffix) {
-  const start = bodyInput.selectionStart, end = bodyInput.selectionEnd;
-  const text = bodyInput.value;
+  const ta = activeTextarea;
+  if (!ta) return;
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const text = ta.value;
   const selected = text.substring(start, end);
-  const newText = text.substring(0, start) + prefix + selected + suffix + text.substring(end);
-  bodyInput.value = newText;
-  bodyInput.focus();
-  bodyInput.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
-  syncStateFromForm(); updateCharCount(); scheduleAutosave();
+  ta.value = text.substring(0, start) + prefix + selected + suffix + text.substring(end);
+  ta.focus();
+  ta.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
+  ta.dispatchEvent(new Event("input"));
 }
 
 function applyQuoteWrap() {
-  const start = bodyInput.selectionStart, end = bodyInput.selectionEnd;
-  const text = bodyInput.value;
+  const ta = activeTextarea;
+  if (!ta) return;
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const text = ta.value;
   const selected = text.substring(start, end).trim().replace(/\n+/g, " ");
   const quoteLine = ">> " + selected;
-  const newText = text.substring(0, start) + quoteLine + text.substring(end);
-  bodyInput.value = newText;
-  bodyInput.focus();
-  bodyInput.setSelectionRange(start, start + quoteLine.length);
-  syncStateFromForm(); updateCharCount(); scheduleAutosave();
-}
-
-function applyHeadingToggle() {
-  const pos = bodyInput.selectionStart;
-  const text = bodyInput.value;
-  const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
-  let lineEnd = text.indexOf("\n", pos);
-  if (lineEnd === -1) lineEnd = text.length;
-  const line = text.substring(lineStart, lineEnd);
-  let newLine;
-  if (/^##\s+/.test(line)) newLine = line.replace(/^##\s+/, "");
-  else newLine = "## " + line.replace(/^##\s*/, "");
-  const newText = text.substring(0, lineStart) + newLine + text.substring(lineEnd);
-  bodyInput.value = newText;
-  bodyInput.focus();
-  const newPos = lineStart + newLine.length;
-  bodyInput.setSelectionRange(newPos, newPos);
-  syncStateFromForm(); updateCharCount(); scheduleAutosave();
+  ta.value = text.substring(0, start) + quoteLine + text.substring(end);
+  ta.focus();
+  ta.setSelectionRange(start, start + quoteLine.length);
+  ta.dispatchEvent(new Event("input"));
 }
 
 decoMenu.addEventListener("click", (e) => {
   const btn = e.target.closest("button");
-  if (!btn || btn.disabled) return;
+  if (!btn) return;
   const act = btn.dataset.act;
   hideDecoMenu();
   if (act === "bold") wrapSelection("**", "**");
   else if (act === "under") wrapSelection("__", "__");
   else if (act === "mark") wrapSelection("==", "==");
   else if (act === "quote") applyQuoteWrap();
-  else if (act === "heading") applyHeadingToggle();
 });
 
 /* 入力方法モーダル */
@@ -371,39 +466,8 @@ document.getElementById("helpBtn").addEventListener("click", () => document.getE
 document.getElementById("closeHelpBtn").addEventListener("click", () => document.getElementById("helpModal").classList.remove("show"));
 
 /* ════════════════════════════════════════════════
-   本文パース(生成エンジン)
+   生成エンジン
    ════════════════════════════════════════════════ */
-function parseBodyToSections(body) {
-  const lines = (body || "").split("\n");
-  const sections = [];
-  let current = null;
-  lines.forEach(line => {
-    const m = line.match(/^##\s+(.+)$/);
-    if (m) {
-      current = { index: sections.length, heading: m[1].trim(), rawLines: [] };
-      sections.push(current);
-    } else {
-      if (!current) {
-        current = { index: sections.length, heading: "", rawLines: [] };
-        sections.push(current);
-      }
-      current.rawLines.push(line);
-    }
-  });
-  return sections;
-}
-
-function getHeadedSectionOrder(sections) {
-  return sections.filter(s => s.heading).map(s => s.index);
-}
-
-function getSectionIcon(sections, idx) {
-  if (state.sectionIcons[idx]) return state.sectionIcons[idx];
-  const order = getHeadedSectionOrder(sections);
-  const pos = order.indexOf(idx);
-  return ICONS[pos % ICONS.length];
-}
-
 function convertInline(text) {
   let t = escapeHtml(text);
   t = t.replace(/\*\*(.+?)\*\*/g, '<span class="t-bold">$1</span>');
@@ -412,8 +476,8 @@ function convertInline(text) {
   return t;
 }
 
-function renderParagraphBlock(block) {
-  const lines = block.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+function renderParagraph(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length && lines.every(l => l.startsWith(">> "))) {
     const joined = lines.map(l => l.slice(3)).join("<br>");
     const parts = joined.split("|");
@@ -421,18 +485,18 @@ function renderParagraphBlock(block) {
     const sub = parts[1] ? `<span class="quote-sub">——${convertInline(parts[1].trim())}——</span>` : "";
     return `<div class="quote-block"><span class="quote-main">${main}</span>${sub}</div>`;
   }
-  return `<p>${convertInline(block.trim())}</p>`;
+  return `<p>${convertInline(text.trim())}</p>`;
 }
 
-function renderSectionHtml(sec, icon, photos) {
+function renderArticleBlockHtml(blk, icon) {
   let html = '  <section class="section">\n';
-  if (sec.heading) {
-    html += `    <h3 class="section-heading"><span class="section-icon">${icon}</span>${escapeHtml(sec.heading)}</h3>\n`;
+  if (blk.heading) {
+    html += `    <h3 class="section-heading"><span class="section-icon">${icon}</span>${escapeHtml(blk.heading)}</h3>\n`;
   }
   html += '    <div class="section-body">\n';
-  const blocks = sec.rawLines.join("\n").split(/\n\s*\n/).map(b => b.trim()).filter(b => b.length > 0);
-  blocks.forEach(b => { html += "      " + renderParagraphBlock(b) + "\n"; });
-  (photos || []).forEach(p => {
+  const paragraphs = blk.body.split(/\n\s*\n/).map(b => b.trim()).filter(b => b.length > 0);
+  paragraphs.forEach(p => { html += "      " + renderParagraph(p) + "\n"; });
+  (blk.photos || []).forEach(p => {
     html += '      <figure class="photo-block">\n';
     html += `        <img src="${p.dataUrl}" alt="${escapeAttr(p.caption || "")}">\n`;
     if (p.caption) html += `        <figcaption>▲ ${escapeHtml(p.caption)}</figcaption>\n`;
@@ -443,11 +507,9 @@ function renderSectionHtml(sec, icon, photos) {
 }
 
 function generateArticleHtml(templateStr) {
-  const sections = parseBodyToSections(state.body);
-  const bodyHtml = sections.map(sec => {
-    const icon = sec.heading ? getSectionIcon(sections, sec.index) : "";
-    const photos = state.sectionPhotos[sec.index] || [];
-    return renderSectionHtml(sec, icon, photos);
+  const bodyHtml = state.blocks.map((blk, idx) => {
+    const icon = blk.icon || ICONS[idx % ICONS.length];
+    return renderArticleBlockHtml(blk, icon);
   }).join("\n\n");
 
   const volPadded = String(state.volNo || "000").padStart(3, "0");
@@ -476,72 +538,10 @@ async function loadTemplate() {
 }
 
 /* ════════════════════════════════════════════════
-   画面2: 写真設定
+   写真アップロード
    ════════════════════════════════════════════════ */
 function totalPhotoCount() {
-  return Object.values(state.sectionPhotos).reduce((sum, arr) => sum + arr.length, 0);
-}
-
-function renderPhotoSections() {
-  const sections = parseBodyToSections(state.body).filter(s => s.heading);
-  const container = document.getElementById("photoSections");
-  container.innerHTML = "";
-  document.getElementById("totalPhotoCount").textContent =
-    `合計 ${totalPhotoCount()} / ${MAX_PHOTOS_TOTAL} 枚`;
-
-  if (sections.length === 0) {
-    container.innerHTML = '<p style="font-size:13px;color:var(--ink-soft);">画面①で本文中に見出し(「見出しにする」)を作成すると、ここに表示されます。</p>';
-    return;
-  }
-
-  sections.forEach(sec => {
-    const idx = sec.index;
-    const photos = state.sectionPhotos[idx] || [];
-    const card = document.createElement("div");
-    card.className = "section-photo-card";
-    card.innerHTML = `
-      <h4>${getSectionIcon(parseBodyToSections(state.body), idx)} ${escapeHtml(sec.heading)}</h4>
-      <div class="photo-thumb-row" id="thumbs-${idx}"></div>
-      <label class="btn" style="display:inline-block;">
-        写真を追加
-        <input type="file" accept="image/jpeg,image/png" style="display:none;" data-idx="${idx}">
-      </label>
-      <div class="photo-upload-note">jpg/png のみ・5MB以下・1見出しにつき最大2枚</div>
-      <div class="err-text" id="err-${idx}"></div>
-    `;
-    container.appendChild(card);
-
-    const thumbRow = card.querySelector(`#thumbs-${idx}`);
-    photos.forEach(p => {
-      const thumb = document.createElement("div");
-      thumb.className = "photo-thumb";
-      thumb.innerHTML = `
-        <img src="${p.dataUrl}">
-        <button class="rm-btn" data-idx="${idx}" data-pid="${p.id}">×</button>
-        <input type="text" placeholder="キャプション(任意)" value="${escapeAttr(p.caption || "")}" data-idx="${idx}" data-pid="${p.id}">
-      `;
-      thumbRow.appendChild(thumb);
-    });
-
-    card.querySelector('input[type=file]').addEventListener("change", (e) => handlePhotoUpload(idx, e));
-  });
-
-  container.querySelectorAll(".rm-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const idx = btn.dataset.idx, pid = btn.dataset.pid;
-      state.sectionPhotos[idx] = (state.sectionPhotos[idx] || []).filter(p => p.id !== pid);
-      renderPhotoSections();
-      scheduleAutosave();
-    });
-  });
-  container.querySelectorAll('input[type=text]').forEach(inp => {
-    inp.addEventListener("input", () => {
-      const idx = inp.dataset.idx, pid = inp.dataset.pid;
-      const p = (state.sectionPhotos[idx] || []).find(p => p.id === pid);
-      if (p) p.caption = inp.value;
-      scheduleAutosave();
-    });
-  });
+  return state.blocks.reduce((sum, b) => sum + b.photos.length, 0);
 }
 
 function resizeImageFile(file) {
@@ -565,11 +565,13 @@ function resizeImageFile(file) {
   });
 }
 
-async function handlePhotoUpload(idx, e) {
+async function handlePhotoUpload(blockId, e) {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
-  const errBox = document.getElementById(`err-${idx}`);
+  const blk = findBlock(blockId);
+  if (!blk) return;
+  const errBox = document.getElementById(`err-${blockId}`);
   errBox.textContent = "";
 
   if (!["image/jpeg", "image/png"].includes(file.type)) {
@@ -580,8 +582,7 @@ async function handlePhotoUpload(idx, e) {
     errBox.textContent = `画像サイズは${MAX_PHOTO_MB}MB以下にしてください。`;
     return;
   }
-  const current = state.sectionPhotos[idx] || [];
-  if (current.length >= MAX_PHOTOS_PER_SECTION) {
+  if (blk.photos.length >= MAX_PHOTOS_PER_SECTION) {
     errBox.textContent = "1見出しにつき2枚までです。";
     return;
   }
@@ -591,14 +592,13 @@ async function handlePhotoUpload(idx, e) {
   }
 
   const dataUrl = await resizeImageFile(file);
-  current.push({ id: "p" + Date.now() + Math.random().toString(36).slice(2, 6), dataUrl, caption: "" });
-  state.sectionPhotos[idx] = current;
-  renderPhotoSections();
+  blk.photos.push({ id: "p" + Date.now() + Math.random().toString(36).slice(2, 6), dataUrl, caption: "" });
+  renderBlocks();
   scheduleAutosave();
 }
 
 /* ════════════════════════════════════════════════
-   画面3: プレビュー・掲載
+   プレビュー・掲載
    ════════════════════════════════════════════════ */
 async function refreshPreview() {
   try {
@@ -612,17 +612,42 @@ async function refreshPreview() {
 document.getElementById("refreshPreviewBtn").addEventListener("click", refreshPreview);
 
 function validateBeforePublish() {
-  if (!state.volNo) return "Vol番号を入力してください。";
-  if (!state.title) return "タイトルを入力してください。";
-  if (!state.body || !state.body.trim()) return "本文を入力してください。";
-  if (totalPhotoCount() > MAX_PHOTOS_TOTAL) return "写真は記事全体で4枚までです。";
+  if (!state.volNo) return { type: "error", msg: "Vol番号を入力してください。" };
+  if (!state.title) return { type: "error", msg: "タイトルを入力してください。" };
+  if (state.blocks.length === 0) return { type: "error", msg: "見出しを1つ以上作成してください。" };
+
+  for (let i = 0; i < state.blocks.length; i++) {
+    const b = state.blocks[i];
+    if (!b.heading.trim() && !b.body.trim()) {
+      return { type: "error", msg: `${i + 1}番目の見出しブロックが空欄です。入力するか削除してください。` };
+    }
+    if (!b.heading.trim()) {
+      return { type: "error", msg: `${i + 1}番目の見出しが空欄です。` };
+    }
+    if (!b.body.trim()) {
+      return { type: "error", msg: `「${b.heading}」の本文が空欄です。` };
+    }
+    if (b.photos.length > MAX_PHOTOS_PER_SECTION) {
+      return { type: "error", msg: `「${b.heading}」の写真が${MAX_PHOTOS_PER_SECTION}枚を超えています。` };
+    }
+  }
+  if (totalPhotoCount() > MAX_PHOTOS_TOTAL) {
+    return { type: "error", msg: `写真は記事全体で${MAX_PHOTOS_TOTAL}枚までです。` };
+  }
+  if (totalPhotoCount() === 0) {
+    return { type: "confirm", msg: "写真が1枚も設定されていませんが、このまま掲載してよろしいですか?" };
+  }
   return null;
 }
 
 document.getElementById("publishBtn").addEventListener("click", async () => {
   if (state.published) return;
-  const err = validateBeforePublish();
-  if (err) { showToast(err, false); return; }
+
+  const check = validateBeforePublish();
+  if (check) {
+    if (check.type === "error") { showToast(check.msg, false); return; }
+    if (check.type === "confirm" && !confirm(check.msg)) return;
+  }
   if (!GAS_URL) {
     showToast("GASのURLが未設定です。docs/SETUP.md の手順に従って設定してください。", false);
     return;
@@ -672,7 +697,7 @@ document.getElementById("publishBtn").addEventListener("click", async () => {
 });
 
 /* ════════════════════════════════════════════════
-   画面4: 掲載履歴
+   掲載履歴
    ════════════════════════════════════════════════ */
 document.getElementById("sheetLink").href = SPREADSHEET_URL;
 
@@ -729,8 +754,8 @@ function loadDraftIntoForm() {
   volNoInput.value = state.volNo || "";
   titleInput.value = state.title || "";
   subtitleInput.value = state.subtitleEn || "";
-  bodyInput.value = state.body || "";
-  updateCharCount();
+  if (!state.blocks || state.blocks.length === 0) state.blocks = [makeBlock()];
+  renderBlocks();
   if (state.published) {
     setInputsDisabled(true);
     document.getElementById("publishBtn").disabled = true;
@@ -746,7 +771,9 @@ function loadDraftIntoForm() {
 function initDraft() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); } catch (e) { saved = null; }
-  if (saved && (saved.title || saved.body || saved.volNo)) {
+  const hasContent = saved && (saved.title || saved.volNo || (saved.blocks && saved.blocks.some(b => b.heading || b.body)));
+
+  if (hasContent) {
     document.getElementById("restoreModal").classList.add("show");
     document.getElementById("restoreDraftBtn").onclick = () => {
       state = Object.assign(state, saved);
@@ -755,16 +782,19 @@ function initDraft() {
     };
     document.getElementById("discardDraftBtn").onclick = () => {
       localStorage.removeItem(DRAFT_KEY);
+      state.blocks = [makeBlock()];
+      renderBlocks();
       document.getElementById("restoreModal").classList.remove("show");
       fetchNextVol();
     };
   } else {
+    state.blocks = [makeBlock()];
+    renderBlocks();
     fetchNextVol();
   }
 }
 
 initDraft();
-updateCharCount();
 </script>
 </body>
 </html>
