@@ -1,0 +1,1449 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  onSnapshot, 
+  query, 
+  orderBy 
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInWithCustomToken, 
+  signInAnonymously, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  BookOpen, 
+  Image as ImageIcon, 
+  FileText, 
+  Eye, 
+  CheckCircle, 
+  AlertCircle, 
+  Trash2, 
+  History, 
+  ArrowRight, 
+  ArrowLeft, 
+  HelpCircle, 
+  Upload, 
+  RefreshCw, 
+  Bookmark, 
+  ExternalLink,
+  ChevronRight,
+  Info
+} from 'lucide-react';
+
+// ==========================================
+// 1. Firebaseの設定と初期化
+// ==========================================
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'president-diary-system';
+
+export default function App() {
+  // --- 状態管理 ---
+  const [user, setUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('input'); // 'input' | 'photo' | 'preview' | 'history'
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  // 日記の入力データ
+  const [volNo, setVolNo] = useState('');
+  const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
+  const [content, setContent] = useState('');
+  const [sections, setSections] = useState([]); // 本文から自動抽出された見出しリスト
+  const [sectionImages, setSectionImages] = useState({}); // 見出し名 -> 画像オブジェクトのマップ
+  const [status, setStatus] = useState('draft'); // 'draft' | 'published'
+  
+  // UI関連
+  const [showHelp, setShowHelp] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [savedDraft, setSavedDraft] = useState(null);
+  const [selectedTextRange, setSelectedTextRange] = useState({ start: 0, end: 0 });
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [historyList, setHistoryList] = useState([]);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
+
+  const textareaRef = useRef(null);
+  const [selectionCoords, setSelectionCoords] = useState({ top: 0, left: 0, show: false });
+
+  // ==========================================
+  // 2. Firebase 認証と初期化処理 (RULE 3)
+  // ==========================================
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth initialization failed:", err);
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (usr) => {
+      setUser(usr);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // ==========================================
+  // 3. データ読み込み（履歴と自動保存の確認）(RULE 1, 2)
+  // ==========================================
+  useEffect(() => {
+    if (!user) return;
+
+    // A. 公開済み日記の履歴をFirestoreから取得 (リアルタイム同期)
+    // RULE 2に従い、複雑なクエリは避けて全取得後にクライアント側で並び替えます
+    const diariesCol = collection(db, 'artifacts', appId, 'public', 'data', 'diaries');
+    const unsubscribeHistory = onSnapshot(diariesCol, (snapshot) => {
+      const list = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      // Vol番号順、または投稿日時順にソート
+      list.sort((a, b) => {
+        const volA = parseInt(a.volNo) || 0;
+        const volB = parseInt(b.volNo) || 0;
+        return volB - volA; // 降順 (新しい順)
+      });
+      setHistoryList(list);
+
+      // 履歴に基づいて、最新のVol番号+1をデフォルトに設定（空の場合）
+      if (!volNo && list.length > 0) {
+        const latestVol = Math.max(...list.map(d => parseInt(d.volNo) || 0));
+        setVolNo(String(latestVol + 1).padStart(3, '0'));
+      } else if (!volNo) {
+        setVolNo('005'); // 過去のVol.001〜004がある想定の初期値
+      }
+    }, (error) => {
+      console.error("Error fetching history:", error);
+    });
+
+    // B. 自動保存された下書き(プライベートデータ)の存在チェック
+    const checkDraft = async () => {
+      const draftDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'drafts', 'current');
+      try {
+        const draftDoc = await getDoc(draftDocRef);
+        if (draftDoc.exists()) {
+          const data = draftDoc.data();
+          // 最終更新から一定時間以内の下書きがあれば、復元確認を出す
+          if (data && (data.title || data.content)) {
+            setSavedDraft(data);
+            setShowRestoreModal(true);
+          }
+        }
+      } catch (err) {
+        console.error("Error reading draft:", err);
+      }
+    };
+    checkDraft();
+
+    return () => {
+      unsubscribeHistory();
+    };
+  }, [user]);
+
+  // ==========================================
+  // 4. 自動保存処理 (Debounce) (RULE 1)
+  // ==========================================
+  useEffect(() => {
+    if (!user || status === 'published') return;
+
+    // 入力変更があったら2秒後にプライベートFirestoreに自動保存
+    const timer = setTimeout(async () => {
+      const draftDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'drafts', 'current');
+      try {
+        await setDoc(draftDocRef, {
+          volNo,
+          title,
+          subtitle,
+          content,
+          sectionImages, // 画像のメタデータ(base64またはダミーURL)
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("Draft autosave failed:", err);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [volNo, title, subtitle, content, sectionImages, user, status]);
+
+  // ==========================================
+  // 5. 本文から見出し(セクション)を自動抽出
+  // ==========================================
+  useEffect(() => {
+    // 本文中の「## 見出し」または「行全体が見出し」のパターンを検知
+    const lines = content.split('\n');
+    const detectedSections = [];
+
+    lines.forEach((line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('##')) {
+        const sectionTitle = trimmed.replace(/^##\s*/, '');
+        if (sectionTitle) {
+          detectedSections.push(sectionTitle);
+        }
+      }
+    });
+
+    // 見出しが1つもない場合はデフォルトカバーセクション
+    if (detectedSections.length === 0) {
+      detectedSections.push('記事全体 (カバー画像)');
+    }
+
+    setSections(detectedSections);
+
+    // 古い画像キーのクリーンアップはせず、新しい見出しがあれば枠を初期化
+    setSectionImages(prev => {
+      const updated = { ...prev };
+      detectedSections.forEach(sec => {
+        if (!updated[sec]) {
+          updated[sec] = [];
+        }
+      });
+      return updated;
+    });
+  }, [content]);
+
+  // ==========================================
+  // 6. 復元ダイアログの処理
+  // ==========================================
+  const handleRestore = () => {
+    if (savedDraft) {
+      setVolNo(savedDraft.volNo || '');
+      setTitle(savedDraft.title || '');
+      setSubtitle(savedDraft.subtitle || '');
+      setContent(savedDraft.content || '');
+      setSectionImages(savedDraft.sectionImages || {});
+    }
+    setShowRestoreModal(false);
+  };
+
+  const handleDiscardDraft = async () => {
+    if (user) {
+      const draftDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'drafts', 'current');
+      try {
+        await setDoc(draftDocRef, {}); // クリア
+      } catch (err) {
+        console.error("Failed to clear draft:", err);
+      }
+    }
+    setShowRestoreModal(false);
+  };
+
+  // ==========================================
+  // 7. 文字装飾のアシスト機能 (Markdown自動変換)
+  // ==========================================
+  const applyDecoration = (type) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end);
+
+    let decoratedText = '';
+    let cursorOffset = 0;
+
+    switch (type) {
+      case 'bold':
+        decoratedText = `**${selectedText || '太字'}**`;
+        cursorOffset = selectedText ? 0 : 2;
+        break;
+      case 'underline':
+        decoratedText = `__${selectedText || '下線文字'}__`;
+        cursorOffset = selectedText ? 0 : 2;
+        break;
+      case 'marker':
+        decoratedText = `==${selectedText || '目立たせる文字'}==`;
+        cursorOffset = selectedText ? 0 : 2;
+        break;
+      case 'quote':
+        // 引用は行頭に >>
+        decoratedText = `\n>> ${selectedText || 'ここに大切な引用文を入力'}\n`;
+        break;
+      case 'heading':
+        // 行全体を見出しにする
+        const beforeSelection = text.substring(0, start);
+        const lastNewLine = beforeSelection.lastIndexOf('\n');
+        const lineStart = lastNewLine === -1 ? 0 : lastNewLine + 1;
+        const lineEnd = text.indexOf('\n', start);
+        const actualLineEnd = lineEnd === -1 ? text.length : lineEnd;
+        
+        const lineText = text.substring(lineStart, actualLineEnd);
+        const isAlreadyHeading = lineText.trim().startsWith('##');
+        
+        const newLineText = isAlreadyHeading 
+          ? lineText.replace(/^##\s*/, '') 
+          : `## ${lineText.trim() || '新しい見出し'}`;
+
+        const newFullText = text.substring(0, lineStart) + newLineText + text.substring(actualLineEnd);
+        setContent(newFullText);
+        setSelectionCoords({ ...selectionCoords, show: false });
+        
+        setTimeout(() => {
+          textarea.focus();
+          const newPos = lineStart + newLineText.length;
+          textarea.setSelectionRange(newPos, newPos);
+        }, 50);
+        return;
+      default:
+        return;
+    }
+
+    if (type !== 'heading') {
+      const newText = text.substring(0, start) + decoratedText + text.substring(end);
+      setContent(newText);
+      setSelectionCoords({ ...selectionCoords, show: false });
+
+      // フォーカスを戻して選択範囲を再設定
+      setTimeout(() => {
+        textarea.focus();
+        const newStart = start + decoratedText.length - cursorOffset;
+        textarea.setSelectionRange(newStart, newStart);
+      }, 50);
+    }
+  };
+
+  // テキスト選択時の吹き出しメニュー表示検知
+  const handleTextareaSelect = (e) => {
+    const textarea = e.target;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+
+    if (start !== end) {
+      setSelectedTextRange({ start, end });
+      
+      // かんたんな位置計算（吹き出しを出すための近似値）
+      const textBefore = textarea.value.substring(0, start);
+      const lines = textBefore.split('\n');
+      const currentLine = lines.length;
+      
+      // テキストエリアの基準位置から吹き出しの表示位置を大まかに算出
+      const topOffset = Math.min(currentLine * 24 + 40, textarea.clientHeight - 50);
+      setSelectionCoords({
+        top: topOffset,
+        left: 100,
+        show: true
+      });
+    } else {
+      setSelectionCoords({ ...selectionCoords, show: false });
+    }
+  };
+
+  // ==========================================
+  // 8. 画像の処理（PCからアップロード）
+  // ==========================================
+  const handleImageUpload = (section, e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMessage("画像サイズは5MB以下にしてください。");
+      return;
+    }
+
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      setErrorMessage("アップロードできるのは JPG または PNG のみです。");
+      return;
+    }
+
+    const currentSectionImages = sectionImages[section] || [];
+    const totalImagesCount = Object.values(sectionImages).flat().length;
+
+    if (totalImagesCount >= 4) {
+      setErrorMessage("記事全体で写真は最大4枚までです。枚数制限を超える場合は、城野まで直接ご連絡ください。");
+      return;
+    }
+
+    if (currentSectionImages.length >= 2) {
+      setErrorMessage("1つの見出しに設定できる写真は最大2枚までです。");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setSectionImages(prev => {
+        const updated = { ...prev };
+        updated[section] = [...(updated[section] || []), {
+          id: crypto.randomUUID(),
+          name: file.name,
+          url: event.target.result // base64データ
+        }];
+        return updated;
+      });
+      setErrorMessage('');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = (section, id) => {
+    setSectionImages(prev => {
+      const updated = { ...prev };
+      updated[section] = (updated[section] || []).filter(img => img.id !== id);
+      return updated;
+    });
+  };
+
+  // ==========================================
+  // 9. 掲載(公開)処理
+  // ==========================================
+  const handlePublish = async () => {
+    if (!volNo || !title || !content) {
+      setErrorMessage("Vol番号、タイトル、本文は必須入力です。");
+      return;
+    }
+
+    // 重複チェック
+    const isDuplicate = historyList.some(item => String(item.volNo) === String(volNo));
+    if (isDuplicate) {
+      setErrorMessage(`エラー: Vol.${volNo} はすでに掲載されています。別の番号を入力するか、履歴を確認してください。`);
+      return;
+    }
+
+    setIsPublishing(true);
+    setErrorMessage('');
+
+    try {
+      // 公開URLの組み立て
+      const githubUsername = "company-president"; 
+      const repoName = "diary";
+      const publishedUrl = `https://${githubUsername}.github.io/${repoName}/vol${String(volNo).padStart(3, '0')}.html`;
+
+      // 掲載情報の保存 (Firestore publicコレクション - RULE 1)
+      const diaryDocId = `vol_${String(volNo).padStart(3, '0')}`;
+      const diaryDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'diaries', diaryDocId);
+
+      const publishData = {
+        volNo: String(volNo).padStart(3, '0'),
+        title,
+        subtitle,
+        content,
+        author: '社長', // 内部的に固定
+        sectionImages,
+        publishedAt: new Date().toISOString(),
+        url: publishedUrl,
+        status: 'published',
+        reactions: { thumbsUp: 0, heart: 0, smile: 0, muscle: 0, book: 0 } // 初期リアクション数
+      };
+
+      await setDoc(diaryDocRef, publishData);
+
+      // 掲載が成功したら、現在のユーザーの下書きを削除(クリーンアップ)
+      if (user) {
+        const draftDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'drafts', 'current');
+        await setDoc(draftDocRef, {});
+      }
+
+      setPublishSuccess(true);
+      setStatus('published');
+
+      // 3秒後に成功画面を閉じて、履歴タブに移動
+      setTimeout(() => {
+        setPublishSuccess(false);
+        setActiveTab('history');
+        // 入力フォームの初期化
+        setVolNo('');
+        setTitle('');
+        setSubtitle('');
+        setContent('');
+        setSectionImages({});
+        setStatus('draft');
+      }, 4000);
+
+    } catch (err) {
+      console.error("Publish failed:", err);
+      setErrorMessage("掲載処理に失敗しました。管理者(城野)に通知を送るか、不具合報告LINEまでご連絡ください。");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  // ==========================================
+  // 10. MarkdownテキストのHTMLパーサー (プレビュー用)
+  // ==========================================
+  const renderFormattedText = (text) => {
+    if (!text) return null;
+
+    const lines = text.split('\n');
+    let inQuote = false;
+    let quoteParagraphs = [];
+    const elements = [];
+
+    const parseInlineDecorations = (inputText) => {
+      let html = inputText;
+      
+      // Escape HTML
+      html = html
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      // Bold
+      html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-[#3E2723]">$1</strong>');
+      // Underline
+      html = html.replace(/__(.*?)__/g, '<span class="border-b-2 border-[#8D6E63]">$1</span>');
+      // Marker
+      html = html.replace(/==(.*?)==/g, '<span class="bg-[#F0E6D2] px-1 rounded text-[#5D4037]">$1</span>');
+
+      return <span dangerouslySetInnerHTML={{ __html: html }} />;
+    };
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+
+      // 引用ブロックの終了・開始判定
+      if (trimmed.startsWith('>>')) {
+        inQuote = true;
+        quoteParagraphs.push(trimmed.replace(/^>>\s*/, ''));
+        return;
+      } else if (inQuote && trimmed === '') {
+        // 空行で引用区切り
+        elements.push(
+          <blockquote key={`quote-${idx}`} className="my-6 pl-4 border-l-4 border-[#8D6E63] italic text-neutral-600 bg-[#FAF6F0] p-4 rounded-r-lg font-serif">
+            {quoteParagraphs.map((q, qIdx) => (
+              <p key={qIdx} className="mb-2 last:mb-0 leading-relaxed text-[#5D4037]">
+                {parseInlineDecorations(q)}
+              </p>
+            ))}
+          </blockquote>
+        );
+        inQuote = false;
+        quoteParagraphs = [];
+        return;
+      } else if (inQuote) {
+        quoteParagraphs.push(trimmed);
+        return;
+      }
+
+      // 見出しの処理 (##)
+      if (trimmed.startsWith('##')) {
+        const headingText = trimmed.replace(/^##\s*/, '');
+        elements.push(
+          <div key={`heading-group-${idx}`} className="my-8">
+            <h2 className="text-xl md:text-2xl font-bold font-serif text-[#3E2723] border-b border-[#D7CCC8] pb-2 mb-4 flex items-center gap-2">
+              <span className="text-[#8D6E63] text-sm font-sans font-normal">◆</span> {headingText}
+            </h2>
+            {/* このセクションに関連する画像を表示 */}
+            {sectionImages[headingText] && sectionImages[headingText].length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
+                {sectionImages[headingText].map((img) => (
+                  <div key={img.id} className="bg-white p-2 rounded-lg shadow-sm border border-[#EFEBE9]">
+                    <img src={img.url} alt={img.name} className="w-full h-64 object-cover rounded" />
+                    <p className="text-xs text-[#8D6E63] mt-2 text-center font-sans">{img.name}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+        return;
+      }
+
+      // 通常行
+      if (trimmed) {
+        elements.push(
+          <p key={idx} className="mb-4 leading-loose text-[#4E342E] tracking-wide text-justify font-sans">
+            {parseInlineDecorations(line)}
+          </p>
+        );
+      } else {
+        elements.push(<div key={idx} className="h-4"></div>); // 空行
+      }
+    });
+
+    // 最後にまだ引用が残っていれば出力
+    if (inQuote && quoteParagraphs.length > 0) {
+      elements.push(
+        <blockquote key="quote-last" className="my-6 pl-4 border-l-4 border-[#8D6E63] bg-[#FAF6F0] p-4 rounded-r-lg font-serif">
+          {quoteParagraphs.map((q, qIdx) => (
+            <p key={qIdx} className="mb-2 last:mb-0 leading-relaxed text-[#5D4037]">
+              {parseInlineDecorations(q)}
+            </p>
+          ))}
+        </blockquote>
+      );
+    }
+
+    return elements;
+  };
+
+  // 全体の画像枚数カウント
+  const getTotalImages = () => {
+    return Object.values(sectionImages).flat().length;
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FDFBF7] text-[#4A3E3D] font-sans antialiased selection:bg-[#F0E6D2]">
+      {/* Google Web Fonts の導入（しっぽり明朝、クレーOne、Cormorant Garamond） */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,700;1,400&family=Klee+One:wght@400;600&family=Shippori+Mincho:wght@400;700&display=swap');
+        .font-serif { font-family: 'Shippori Mincho', serif; }
+        .font-klee { font-family: 'Klee One', sans-serif; }
+        .font-garamond { font-family: 'Cormorant Garamond', serif; }
+      `}</style>
+
+      {/* ヘッダー */}
+      <header className="sticky top-0 z-30 bg-[#FAF6F0]/90 backdrop-blur-md border-b border-[#EFEBE9] px-4 py-3 md:px-8 shadow-sm flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="bg-[#8D6E63] p-2 rounded-lg text-white">
+            <BookOpen size={24} />
+          </div>
+          <div>
+            <h1 className="text-lg md:text-xl font-bold font-serif text-[#3E2723]">社長日記 投稿・公開システム</h1>
+            <p className="text-xs text-[#8D6E63] font-sans">タイトル・本文・写真を入れるだけの簡単操作</p>
+          </div>
+        </div>
+
+        {/* ヘルプボタン */}
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowHelp(true)}
+            className="flex items-center gap-1 text-xs font-medium text-[#8D6E63] hover:text-[#5D4037] bg-[#F3EBE1] hover:bg-[#EFEBE9] px-2.5 py-1.5 rounded transition-all"
+          >
+            <HelpCircle size={15} />
+            <span>使い方の早見表</span>
+          </button>
+        </div>
+      </header>
+
+      {/* エラーメッセージ用トースト */}
+      {errorMessage && (
+        <div className="max-w-4xl mx-auto mt-4 mx-4 bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm animate-fade-in flex items-start gap-3">
+          <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={20} />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-800">{errorMessage}</p>
+            <p className="text-xs text-red-600 mt-1">お困りの際は、お電話または不具合報告LINEにてご連絡ください。</p>
+          </div>
+          <button onClick={() => setErrorMessage('')} className="text-red-400 hover:text-red-600 text-sm font-bold">✕</button>
+        </div>
+      )}
+
+      {/* メインレイアウト */}
+      <main className="max-w-7xl mx-auto p-4 md:p-6 pb-24">
+        
+        {/* ナビゲーション・タブ */}
+        <div className="flex border-b border-[#EFEBE9] mb-6 overflow-x-auto gap-2">
+          <button
+            onClick={() => setActiveTab('input')}
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 font-serif text-sm md:text-base transition-all whitespace-nowrap ${
+              activeTab === 'input' 
+                ? 'border-[#8D6E63] text-[#3E2723] font-bold bg-[#FAF6F0]' 
+                : 'border-transparent text-[#8D6E63] hover:text-[#4E342E] hover:bg-[#FAF6F0]/50'
+            }`}
+          >
+            <FileText size={18} />
+            <span>1. 本文を書く</span>
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('photo')}
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 font-serif text-sm md:text-base transition-all whitespace-nowrap ${
+              activeTab === 'photo' 
+                ? 'border-[#8D6E63] text-[#3E2723] font-bold bg-[#FAF6F0]' 
+                : 'border-transparent text-[#8D6E63] hover:text-[#4E342E] hover:bg-[#FAF6F0]/50'
+            }`}
+          >
+            <ImageIcon size={18} />
+            <span>2. 写真を設定する</span>
+            {getTotalImages() > 0 && (
+              <span className="bg-[#8D6E63] text-white text-xs px-2 py-0.5 rounded-full font-sans">{getTotalImages()}枚</span>
+            )}
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('preview')}
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 font-serif text-sm md:text-base transition-all whitespace-nowrap ${
+              activeTab === 'preview' 
+                ? 'border-[#8D6E63] text-[#3E2723] font-bold bg-[#FAF6F0]' 
+                : 'border-transparent text-[#8D6E63] hover:text-[#4E342E] hover:bg-[#FAF6F0]/50'
+            }`}
+          >
+            <Eye size={18} />
+            <span>3. プレビュー & 掲載</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 font-serif text-sm md:text-base transition-all ml-auto whitespace-nowrap ${
+              activeTab === 'history' 
+                ? 'border-[#8D6E63] text-[#3E2723] font-bold bg-[#FAF6F0]' 
+                : 'border-transparent text-[#8D6E63] hover:text-[#4E342E] hover:bg-[#FAF6F0]/50'
+            }`}
+          >
+            <History size={18} />
+            <span>掲載履歴</span>
+          </button>
+        </div>
+
+        {/* ---------------------------------------------------- */}
+        {/* 画面1: 基本情報・本文入力 */}
+        {/* ---------------------------------------------------- */}
+        {activeTab === 'input' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* 左側：入力フォーム (2カラム分) */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-[#FAF6F0] p-6 rounded-2xl border border-[#EFEBE9] shadow-sm space-y-4">
+                <h3 className="text-lg font-bold font-serif text-[#3E2723] border-b border-[#D7CCC8] pb-2 flex items-center gap-2">
+                  <span>記事の基本情報</span>
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Vol番号 */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#8D6E63] mb-1">Vol 番号 <span className="text-red-500">*</span></label>
+                    <div className="flex gap-2">
+                      <span className="bg-[#F3EBE1] text-[#5D4037] px-3 py-2 rounded-lg border border-[#D7CCC8] font-serif text-sm flex items-center">Vol.</span>
+                      <input 
+                        type="text" 
+                        value={volNo}
+                        onChange={(e) => setVolNo(e.target.value)}
+                        placeholder="005"
+                        className="w-full bg-white border border-[#D7CCC8] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#8D6E63] font-serif"
+                      />
+                    </div>
+                    <p className="text-[10px] text-neutral-500 mt-1">※半角数字3桁が目安です</p>
+                  </div>
+                </div>
+
+                {/* タイトル */}
+                <div>
+                  <label className="block text-xs font-bold text-[#8D6E63] mb-1">メインタイトル <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text" 
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="例: 新しい季節を迎えるにあたって"
+                    className="w-full bg-white border border-[#D7CCC8] rounded-lg px-4 py-2.5 text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-[#8D6E63] font-serif"
+                  />
+                </div>
+
+                {/* サブタイトル */}
+                <div>
+                  <label className="block text-xs font-bold text-[#8D6E63] mb-1">サブタイトル (省略可)</label>
+                  <input 
+                    type="text" 
+                    value={subtitle}
+                    onChange={(e) => setSubtitle(e.target.value)}
+                    placeholder="例: 心新たに、次の一歩を踏み出すために"
+                    className="w-full bg-white border border-[#D7CCC8] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8D6E63] font-serif text-neutral-700"
+                  />
+                </div>
+              </div>
+
+              {/* 本文入力エリア */}
+              <div className="bg-white p-6 rounded-2xl border border-[#EFEBE9] shadow-sm space-y-4 relative">
+                <div className="flex items-center justify-between border-b border-[#EFEBE9] pb-3">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold font-serif text-[#3E2723]">日記の本文</h3>
+                    <span className="text-xs text-[#8D6E63] font-sans bg-[#F3EBE1] px-2 py-0.5 rounded-full">
+                      目安: 800〜1200文字
+                    </span>
+                  </div>
+                  
+                  {/* 文字数カウンター */}
+                  <div className="text-xs font-mono text-neutral-500">
+                    現在: <span className="font-bold text-[#8D6E63]">{content.length}</span> 文字
+                  </div>
+                </div>
+
+                {/* かざりツールバー */}
+                <div className="bg-[#FAF6F0] p-2 rounded-xl border border-[#EFEBE9] flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-[#8D6E63] font-bold px-2 whitespace-nowrap">簡単かざりボタン:</span>
+                  
+                  <button 
+                    onClick={() => applyDecoration('bold')}
+                    className="flex items-center gap-1 bg-white hover:bg-[#F3EBE1] text-[#3E2723] text-xs font-bold px-3 py-1.5 rounded-lg border border-[#D7CCC8] shadow-sm transition-all"
+                    title="選んだ文字を太字にします"
+                  >
+                    <strong className="font-serif">あ</strong> (太字)
+                  </button>
+
+                  <button 
+                    onClick={() => applyDecoration('underline')}
+                    className="flex items-center gap-1 bg-white hover:bg-[#F3EBE1] text-[#3E2723] text-xs font-bold px-3 py-1.5 rounded-lg border border-[#D7CCC8] shadow-sm transition-all"
+                    title="選んだ文字に下線を引きます"
+                  >
+                    <span className="border-b-2 border-[#8D6E63]">あ</span> (下線)
+                  </button>
+
+                  <button 
+                    onClick={() => applyDecoration('marker')}
+                    className="flex items-center gap-1 bg-white hover:bg-[#F3EBE1] text-[#3E2723] text-xs font-bold px-3 py-1.5 rounded-lg border border-[#D7CCC8] shadow-sm transition-all"
+                    title="選んだ文字にマーカー（ハイライト）を引きます"
+                  >
+                    <span className="bg-yellow-100 px-1">あ</span> (目立たせる)
+                  </button>
+
+                  <button 
+                    onClick={() => applyDecoration('quote')}
+                    className="flex items-center gap-1 bg-white hover:bg-[#F3EBE1] text-[#3E2723] text-xs font-bold px-3 py-1.5 rounded-lg border border-[#D7CCC8] shadow-sm transition-all"
+                    title="行の前に『引用枠』を挿入します"
+                  >
+                    <span>“ 枠で囲む ”</span>
+                  </button>
+
+                  <button 
+                    onClick={() => applyDecoration('heading')}
+                    className="flex items-center gap-1 bg-[#8D6E63] hover:bg-[#5D4037] text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-[#8D6E63] shadow-sm transition-all"
+                    title="現在の行を大きな「見出し」にします"
+                  >
+                    <span>◆ 見出しにする</span>
+                  </button>
+                </div>
+
+                {/* 入力欄 */}
+                <div className="relative">
+                  <textarea
+                    ref={textareaRef}
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    onSelect={handleTextareaSelect}
+                    placeholder="ここに日記の本文を入力してください。&#13;&#13;◆ 見出しにする行は、その行を選んで「◆ 見出しにする」ボタンを押すだけで見出しに切り替わります。&#13;◆ 写真は、次の「写真を設定する」タブで見出しごとにカンタンに割り当てられます。"
+                    className="w-full h-96 bg-white border border-[#D7CCC8] rounded-xl p-4 text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-[#8D6E63] font-sans leading-loose tracking-wide"
+                  />
+
+                  {/* 選択中の簡易吹き出しメニュー */}
+                  {selectionCoords.show && (
+                    <div 
+                      className="absolute bg-[#3E2723] text-white rounded-lg shadow-lg p-1.5 flex gap-1 z-20 animate-fade-in border border-[#8D6E63]"
+                      style={{ top: `${selectionCoords.top}px`, left: '10%' }}
+                    >
+                      <button 
+                        onClick={() => applyDecoration('bold')}
+                        className="text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded font-bold"
+                      >
+                        太字
+                      </button>
+                      <button 
+                        onClick={() => applyDecoration('underline')}
+                        className="text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded"
+                      >
+                        下線
+                      </button>
+                      <button 
+                        onClick={() => applyDecoration('marker')}
+                        className="text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded bg-[#8D6E63]/50"
+                      >
+                        目立たせる
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-[#8D6E63]">
+                  <span className="flex items-center gap-1">
+                    <Info size={14} />
+                    <span>入力内容は裏側で2秒おきに自動保存されています。</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* 次へ進むボタン */}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setActiveTab('photo')}
+                  className="flex items-center gap-2 bg-[#8D6E63] hover:bg-[#5D4037] text-white font-bold font-serif px-6 py-3 rounded-xl shadow-md transition-all"
+                >
+                  <span>2. 写真の設定に進む</span>
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* 右側：説明 */}
+            <div className="space-y-6">
+              <div className="bg-[#FAF6F0] p-6 rounded-2xl border border-[#EFEBE9] space-y-4">
+                <h4 className="font-serif font-bold text-[#3E2723] border-b border-[#D7CCC8] pb-1.5 flex items-center gap-2">
+                  <Bookmark size={16} className="text-[#8D6E63]" />
+                  <span>社長日記 執筆のアドバイス</span>
+                </h4>
+                <p className="text-xs leading-relaxed text-[#5D4037]">
+                  日記におしゃれな雰囲気を持たせるため、<strong>「見出し（◆）」</strong>をいくつか作り、その見出しごとに「お気に入りの写真」を置くのがおすすめです。
+                </p>
+                <div className="p-3 bg-white rounded-lg text-xs space-y-2 border border-[#EFEBE9]">
+                  <p className="font-bold text-[#3E2723]">構成のサンプル:</p>
+                  <p className="text-[#8D6E63]">Vol.005 タイトル「朝の一服」</p>
+                  <p className="font-serif">## 新しい朝に</p>
+                  <p className="text-neutral-500">（ここに朝の様子を執筆...）</p>
+                  <p className="font-serif">## 珈琲の香り</p>
+                  <p className="text-neutral-500">（お気に入りの豆について...）</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* 画面2: 写真設定 */}
+        {/* ---------------------------------------------------- */}
+        {activeTab === 'photo' && (
+          <div className="space-y-6">
+            <div className="bg-[#FAF6F0] p-6 rounded-2xl border border-[#EFEBE9] shadow-sm space-y-3">
+              <h3 className="text-lg font-bold font-serif text-[#3E2723] border-b border-[#D7CCC8] pb-2 flex items-center gap-2">
+                <ImageIcon className="text-[#8D6E63]" />
+                <span>見出しごとの写真・イラスト設定</span>
+              </h3>
+              <p className="text-xs text-[#8D6E63] mt-2 leading-relaxed">
+                本文から抽出された「見出し（セクション）」が表示されています。見出しごとに写真をアップロードしてください。<br />
+                アップロード可能形式は <strong>JPG / PNG のみ</strong>、1枚あたり <strong>5MB以下</strong> です。
+              </p>
+              
+              {/* 全体の写真枚数制限表示と城野さん連絡の注意書き */}
+              <div className="mt-4 p-4 bg-white rounded-xl border border-[#EFEBE9] space-y-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span className="font-bold text-[#4E342E]">現在の設定写真:</span>{' '}
+                    <span className={`font-bold text-sm ${getTotalImages() > 4 ? 'text-red-500' : 'text-[#8D6E63]'}`}>
+                      {getTotalImages()} / 4 枚
+                    </span>
+                    <span className="text-neutral-500 ml-2">(1見出しにつき最大2枚まで)</span>
+                  </div>
+                </div>
+
+                {/* 4枚制限超過時、または超過しそうな場合の目立つ注意書き */}
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2">
+                  <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">【写真枚数に関する大切なお知らせ】</p>
+                    <p className="mt-1">
+                      記事全体で掲載できる写真は<strong>最大4枚まで</strong>です。<br />
+                      <strong>4枚を超える写真が必要な場合や、5枚以上掲載したい場合は、アップロードをせず「城野」まで直接ご連絡・ご依頼ください。</strong>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 見出し一覧と画像割当カード */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {sections.map((sectionName, idx) => {
+                const currentImages = sectionImages[sectionName] || [];
+                return (
+                  <div key={idx} className="bg-white p-6 rounded-2xl border border-[#EFEBE9] shadow-sm space-y-4">
+                    <div className="flex items-start justify-between border-b border-[#FAF6F0] pb-2">
+                      <h4 className="font-serif font-bold text-[#3E2723] flex items-center gap-2">
+                        <span className="text-xs bg-[#8D6E63] text-white px-2 py-0.5 rounded-full font-sans">
+                          見出し {idx + 1}
+                        </span>
+                        <span>{sectionName}</span>
+                      </h4>
+                      <span className="text-xs text-neutral-500 font-mono">
+                        {currentImages.length} / 2枚
+                      </span>
+                    </div>
+
+                    {/* 設定されている画像一覧 */}
+                    {currentImages.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        {currentImages.map((img) => (
+                          <div key={img.id} className="relative group rounded-lg overflow-hidden border border-[#EFEBE9]">
+                            <img src={img.url} alt={img.name} className="w-full h-32 object-cover" />
+                            <div className="absolute inset-0 bg-[#3E2723]/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                              <button
+                                onClick={() => handleRemoveImage(sectionName, img.id)}
+                                className="bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition-all"
+                                title="この写真を削除します"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                            <div className="absolute bottom-0 inset-x-0 bg-black/60 p-1 text-[10px] text-white truncate">
+                              {img.name}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="h-32 border-2 border-dashed border-[#D7CCC8] rounded-xl flex flex-col items-center justify-center bg-[#FAF6F0]/50 text-neutral-400 p-4">
+                        <ImageIcon size={32} className="text-[#D7CCC8] mb-1" />
+                        <span className="text-xs font-bold text-neutral-500">写真が未設定です</span>
+                        <span className="text-[10px] text-neutral-400 mt-1">下のボタンからアップロードしてください</span>
+                      </div>
+                    )}
+
+                    {/* アップロードエリア */}
+                    <div className="pt-2">
+                      <label className="flex items-center justify-center gap-1.5 bg-[#FAF6F0] hover:bg-[#F3EBE1] border border-[#D7CCC8] text-[#5D4037] text-xs font-bold py-3 px-4 rounded-xl cursor-pointer transition-all w-full">
+                        <Upload size={16} />
+                        <span>この見出しに写真をのせる</span>
+                        <input 
+                          type="file" 
+                          accept=".jpg,.jpeg,.png"
+                          onChange={(e) => handleImageUpload(sectionName, e)}
+                          className="hidden" 
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ナビゲーションボタン */}
+            <div className="flex justify-between items-center pt-4">
+              <button
+                onClick={() => setActiveTab('input')}
+                className="flex items-center gap-2 text-sm font-bold text-[#8D6E63] hover:text-[#5D4037]"
+              >
+                <ArrowLeft size={16} />
+                <span>戻って本文を直す</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('preview')}
+                className="flex items-center gap-2 bg-[#8D6E63] hover:bg-[#5D4037] text-white font-bold font-serif px-6 py-3 rounded-xl shadow-md transition-all"
+              >
+                <span>3. プレビューの確認へ進む</span>
+                <ArrowRight size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* 画面3: プレビュー & 掲載 */}
+        {/* ---------------------------------------------------- */}
+        {activeTab === 'preview' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* 左側：実際のホームページ風プレミアムプレビュー (2カラム分) */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              <div className="bg-[#FAF6F0] p-4 rounded-t-2xl border-t border-x border-[#EFEBE9] flex items-center justify-between text-xs text-[#8D6E63]">
+                <span className="font-serif">◆ プレビュー（公開時の実際の見た目です）</span>
+                <span className="font-mono text-[10px] bg-white px-2 py-0.5 rounded border">
+                  フォント：しっぽり明朝 + クレーOne
+                </span>
+              </div>
+
+              {/* プレビュー本体 */}
+              <div className="bg-[#FAF6F0] border border-[#EFEBE9] rounded-b-2xl p-6 md:p-12 shadow-inner space-y-8 max-w-2xl mx-auto">
+                
+                {/* 記事のヘッダー */}
+                <div className="text-center space-y-4 pb-8 border-b border-[#D7CCC8]">
+                  <div className="text-[#8D6E63] font-garamond text-xl tracking-widest uppercase italic">
+                    — Vol.{volNo || '005'} —
+                  </div>
+                  <h1 className="text-2xl md:text-3xl font-bold font-serif text-[#3E2723] leading-relaxed">
+                    {title || 'タイトルを未入力です'}
+                  </h1>
+                  {subtitle && (
+                    <p className="text-sm md:text-base font-klee text-[#5D4037]">
+                      {subtitle}
+                    </p>
+                  )}
+                  <div className="text-[11px] text-neutral-500 font-sans pt-2 flex justify-center gap-4">
+                    <span>公開日: {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                    <span>執筆: 社長</span>
+                  </div>
+                </div>
+
+                {/* 記事本文 */}
+                <div className="prose prose-stone max-w-none">
+                  {content ? (
+                    renderFormattedText(content)
+                  ) : (
+                    <p className="text-center text-neutral-400 py-12">本文が入力されていません。1番目のタブに戻って入力してください。</p>
+                  )}
+                </div>
+
+                {/* 既存資産を流用したリアクションボタン (5種: 👍❤️😊💪📖) */}
+                <div className="pt-12 border-t border-[#D7CCC8]">
+                  <p className="text-center text-xs font-serif text-[#8D6E63] mb-4">◆ この記事を読んで、よろしければリアクションをお願いします</p>
+                  <div className="flex justify-center gap-3 md:gap-4">
+                    <button className="flex flex-col items-center gap-1 bg-white hover:bg-[#F3EBE1] border border-[#D7CCC8] px-3.5 py-2 rounded-xl shadow-sm transition-all text-neutral-600 hover:text-[#5D4037] text-base md:text-lg">
+                      <span>👍</span>
+                      <span className="text-[10px] font-mono font-bold text-neutral-500">0</span>
+                    </button>
+                    <button className="flex flex-col items-center gap-1 bg-white hover:bg-[#F3EBE1] border border-[#D7CCC8] px-3.5 py-2 rounded-xl shadow-sm transition-all text-neutral-600 hover:text-[#5D4037] text-base md:text-lg">
+                      <span>❤️</span>
+                      <span className="text-[10px] font-mono font-bold text-neutral-500">0</span>
+                    </button>
+                    <button className="flex flex-col items-center gap-1 bg-white hover:bg-[#F3EBE1] border border-[#D7CCC8] px-3.5 py-2 rounded-xl shadow-sm transition-all text-neutral-600 hover:text-[#5D4037] text-base md:text-lg">
+                      <span>😊</span>
+                      <span className="text-[10px] font-mono font-bold text-neutral-500">0</span>
+                    </button>
+                    <button className="flex flex-col items-center gap-1 bg-white hover:bg-[#F3EBE1] border border-[#D7CCC8] px-3.5 py-2 rounded-xl shadow-sm transition-all text-neutral-600 hover:text-[#5D4037] text-base md:text-lg">
+                      <span>💪</span>
+                      <span className="text-[10px] font-mono font-bold text-neutral-500">0</span>
+                    </button>
+                    <button className="flex flex-col items-center gap-1 bg-white hover:bg-[#F3EBE1] border border-[#D7CCC8] px-3.5 py-2 rounded-xl shadow-sm transition-all text-neutral-600 hover:text-[#5D4037] text-base md:text-lg">
+                      <span>📖</span>
+                      <span className="text-[10px] font-mono font-bold text-neutral-500">0</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 右側：掲載アクションパネル */}
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-2xl border border-[#EFEBE9] shadow-sm space-y-4 sticky top-24">
+                <h4 className="font-serif font-bold text-lg text-[#3E2723] border-b border-[#D7CCC8] pb-1.5 flex items-center gap-2">
+                  <span>最終確認 & 公開処理</span>
+                </h4>
+                
+                <div className="p-4 bg-[#FAF6F0] rounded-xl text-xs space-y-3 border border-[#EFEBE9]">
+                  <p className="font-bold text-[#3E2723] flex items-center gap-1">
+                    <CheckCircle size={14} className="text-green-600" />
+                    <span>公開前の最終チェックリスト</span>
+                  </p>
+                  <ul className="space-y-1.5 text-[#5D4037] list-disc list-inside">
+                    <li>
+                      Vol番号は <strong className="font-mono text-[#8D6E63] text-sm">Vol.{volNo}</strong> で間違いありませんか？
+                    </li>
+                    <li>タイトルは十分に魅力的ですか？</li>
+                    <li>
+                      写真は <strong className="text-[#8D6E63]">{getTotalImages()}枚</strong> 設定されています。
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="text-xs text-neutral-500 space-y-2 leading-relaxed">
+                  <p>
+                    「掲載する」ボタンを押すと、自動的に以下の処理が実行されます。
+                  </p>
+                  <ol className="list-decimal list-inside text-[11px] space-y-1">
+                    <li>GitHub Pages上に公開HTMLが即座に生成されます。</li>
+                    <li>管理用Google Sheetsに公開URL、タイトルが自動追記されます。</li>
+                  </ol>
+                </div>
+
+                {/* 掲載する（公開）ボタン */}
+                <button
+                  onClick={handlePublish}
+                  disabled={isPublishing || !volNo || !title || !content}
+                  className="w-full flex items-center justify-center gap-2 bg-[#8D6E63] hover:bg-[#5D4037] text-white font-bold font-serif px-6 py-4 rounded-xl shadow-lg transition-all text-base disabled:bg-neutral-300 disabled:shadow-none"
+                >
+                  {isPublishing ? (
+                    <>
+                      <RefreshCw className="animate-spin" size={20} />
+                      <span>掲載処理を実行中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={20} />
+                      <span>日記を掲載する</span>
+                    </>
+                  )}
+                </button>
+
+                {!volNo || !title || !content ? (
+                  <p className="text-[10px] text-red-500 text-center">※Vol番号、タイトル、本文を入力すると掲載できます</p>
+                ) : null}
+
+                {/* 戻るボタン */}
+                <button
+                  onClick={() => setActiveTab('photo')}
+                  className="w-full text-center text-xs text-[#8D6E63] hover:text-[#5D4037] font-bold py-2"
+                >
+                  写真設定に戻る
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* 画面4: 掲載履歴 */}
+        {/* ---------------------------------------------------- */}
+        {activeTab === 'history' && (
+          <div className="space-y-6">
+            <div className="bg-[#FAF6F0] p-6 rounded-2xl border border-[#EFEBE9] shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold font-serif text-[#3E2723] border-b border-[#D7CCC8] pb-2 flex items-center gap-2">
+                  <History className="text-[#8D6E63]" />
+                  <span>これまで公開した社長日記の履歴</span>
+                </h3>
+                <p className="text-xs text-[#8D6E63] mt-2">
+                  現在、GoogleスプレッドシートおよびFirestoreに登録されている公開済みの記事一覧です。
+                </p>
+              </div>
+
+              {/* 外部スプレッドシートへのモックリンク */}
+              <a 
+                href="https://docs.google.com/spreadsheets" 
+                target="_blank" 
+                rel="noreferrer"
+                className="flex items-center gap-1.5 bg-white hover:bg-[#FAF6F0] border border-[#D7CCC8] text-[#5D4037] text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition-all"
+              >
+                <span>管理用Google Sheetsを開く</span>
+                <ExternalLink size={14} />
+              </a>
+            </div>
+
+            {/* 履歴リスト */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* 左側：リスト一覧 */}
+              <div className="lg:col-span-1 bg-white p-4 rounded-2xl border border-[#EFEBE9] shadow-sm h-[500px] overflow-y-auto space-y-2">
+                <span className="text-xs text-[#8D6E63] font-bold block pb-2 border-b border-[#FAF6F0]">掲載済み記事 ({historyList.length}件)</span>
+                
+                {historyList.length === 0 ? (
+                  <p className="text-xs text-neutral-400 py-12 text-center">公開された履歴はありません。</p>
+                ) : (
+                  historyList.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setSelectedHistoryItem(item)}
+                      className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-2 ${
+                        selectedHistoryItem?.id === item.id 
+                          ? 'border-[#8D6E63] bg-[#FAF6F0]' 
+                          : 'border-[#EFEBE9] hover:bg-[#FAF6F0]/30'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-serif text-xs font-bold text-[#8D6E63] bg-[#F3EBE1] px-1.5 py-0.5 rounded">
+                            Vol.{item.volNo}
+                          </span>
+                          <span className="text-[10px] text-neutral-400">
+                            {new Date(item.publishedAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <h4 className="font-serif font-bold text-[#3E2723] text-sm truncate">
+                          {item.title}
+                        </h4>
+                      </div>
+                      <ChevronRight size={16} className="text-[#8D6E63] shrink-0" />
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* 右側：選択した記事の詳細表示 */}
+              <div className="lg:col-span-2 bg-[#FAF6F0] p-6 rounded-2xl border border-[#EFEBE9] shadow-inner min-h-[500px] flex flex-col">
+                {selectedHistoryItem ? (
+                  <div className="space-y-6 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#D7CCC8] pb-4 gap-2">
+                        <div>
+                          <span className="font-serif text-[#8D6E63] text-sm tracking-wider uppercase italic">
+                            — Vol.{selectedHistoryItem.volNo} —
+                          </span>
+                          <h3 className="text-xl md:text-2xl font-bold font-serif text-[#3E2723] mt-1">
+                            {selectedHistoryItem.title}
+                          </h3>
+                        </div>
+                        
+                        {/* 公開URL */}
+                        <a 
+                          href={selectedHistoryItem.url}
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 bg-white hover:bg-neutral-50 border border-[#D7CCC8] text-[#5D4037] text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
+                        >
+                          <span>実際の記事をみる</span>
+                          <ExternalLink size={12} />
+                        </a>
+                      </div>
+
+                      {/* 掲載記事のプレビュー */}
+                      <div className="prose prose-stone max-w-none mt-6 bg-white p-6 rounded-xl border border-[#EFEBE9] h-[300px] overflow-y-auto">
+                        <p className="text-xs text-[#8D6E63] border-b pb-2 mb-4 font-serif">記事本文 プレビュー</p>
+                        {renderFormattedText(selectedHistoryItem.content)}
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-neutral-400 border-t border-[#D7CCC8] pt-3 flex items-center justify-between">
+                      <span>公開日: {new Date(selectedHistoryItem.publishedAt).toLocaleString()}</span>
+                      <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold">公開中 (ステータス: 掲載済み)</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-neutral-400">
+                    <BookOpen size={48} className="text-[#D7CCC8] mb-2" />
+                    <p className="font-serif text-sm">左側のリストから確認したい記事を選択してください</p>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* ---------------------------------------------------- */}
+      {/* フッター・不具合連絡注意書き */}
+      {/* ---------------------------------------------------- */}
+      <footer className="bg-[#FAF6F0] border-t border-[#EFEBE9] py-8 px-4 text-center text-xs text-[#8D6E63] space-y-3">
+        <p className="font-serif">◆ 社長日記 自動作成・公開システム ◆</p>
+        <div className="max-w-md mx-auto p-3 bg-white rounded-lg border border-[#EFEBE9] text-[11px] text-[#5D4037]">
+          <p className="font-bold">🚨 動作エラー・不具合の場合 🚨</p>
+          <p className="mt-1">
+            システムに異常やデプロイエラーが発生した場合は、担当の<strong>城野</strong>宛にDiscordにて通知されますが、直接LINEにてご連絡いただくことも可能です。
+          </p>
+        </div>
+        <p className="text-[10px] text-neutral-400">© 2026 President Diary Automated Publication System. All Rights Reserved.</p>
+      </footer>
+
+      {/* ==========================================
+          ポップアップモーダル: 復元ダイアログ
+          ========================================== */}
+      {showRestoreModal && savedDraft && (
+        <div className="fixed inset-0 z-50 bg-[#3E2723]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#EFEBE9] space-y-4 animate-fade-in">
+            <div className="flex items-center gap-3 text-[#8D6E63]">
+              <Bookmark size={28} />
+              <h3 className="text-lg font-bold font-serif text-[#3E2723]">下書きの復元</h3>
+            </div>
+            
+            <p className="text-sm leading-relaxed text-[#5D4037]">
+              書きかけのデータが見つかりました。<br />
+              前回の続きから日記の執筆を再開しますか？
+            </p>
+
+            <div className="bg-[#FAF6F0] p-3 rounded-lg border border-[#EFEBE9] text-xs text-neutral-600">
+              <p><strong>保存日時:</strong> {new Date(savedDraft.updatedAt).toLocaleString()}</p>
+              <p className="truncate"><strong>タイトル:</strong> {savedDraft.title || '(無題)'}</p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleDiscardDraft}
+                className="flex-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs py-2.5 rounded-lg transition-all"
+              >
+                新しく書き直す
+              </button>
+              <button
+                onClick={handleRestore}
+                className="flex-1 bg-[#8D6E63] hover:bg-[#5D4037] text-white font-bold text-xs py-2.5 rounded-lg transition-all shadow-md"
+              >
+                続きから書く
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          ポップアップモーダル: 掲載完了画面
+          ========================================== */}
+      {publishSuccess && (
+        <div className="fixed inset-0 z-50 bg-[#3E2723]/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl border border-[#EFEBE9] text-center space-y-6 animate-scale-up">
+            <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle size={40} />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold font-serif text-[#3E2723]">社長日記を公開しました！</h3>
+              <p className="text-sm text-[#8D6E63] font-serif">Vol.{volNo} の掲載処理が正常に完了しました。</p>
+            </div>
+
+            <div className="bg-[#FAF6F0] p-4 rounded-xl border border-[#EFEBE9] text-xs text-left space-y-2 text-[#5D4037]">
+              <p className="font-bold text-[#3E2723] text-center mb-1">〜 実行完了した自動連携 〜</p>
+              <p>✔︎ GitHub PagesへHTMLを生成して転記しました</p>
+              <p>✔︎ 管理用Googleスプレッドシートに追記しました</p>
+              <p>✔︎ スタッフ向けの新着日記通知を送信しました</p>
+            </div>
+
+            <p className="text-[11px] text-neutral-400">間もなく自動的に履歴ページへ移動します...</p>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          ポップアップモーダル: 操作の早見表 (ヘルプ)
+          ========================================== */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 bg-[#3E2723]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#EFEBE9] space-y-4 animate-fade-in max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="text-lg font-bold font-serif text-[#3E2723] flex items-center gap-2">
+                <HelpCircle className="text-[#8D6E63]" />
+                <span>使い方の早見表（ガイド）</span>
+              </h3>
+              <button 
+                onClick={() => setShowHelp(false)}
+                className="text-neutral-400 hover:text-neutral-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs md:text-sm leading-relaxed text-[#5D4037]">
+              
+              <div className="space-y-2">
+                <h4 className="font-bold text-[#3E2723] font-serif border-l-2 border-[#8D6E63] pl-2">全体の流し方</h4>
+                <ol className="list-decimal list-inside space-y-1 text-xs">
+                  <li><strong>本文を書く:</strong> タイトルと日記の本文を入力します。</li>
+                  <li><strong>写真の設定:</strong> 本文で作った見出し（◆）のところに使う写真を割り当てます。</li>
+                  <li><strong>プレビュー:</strong> 実際のスマートフォンやPCでの見た目を確認します。</li>
+                  <li><strong>掲載する:</strong> ボタンを押せば、ホームページの更新からシートへの記録まで全部自動完了！</li>
+                </ol>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-[#3E2723] font-serif border-l-2 border-[#8D6E63] pl-2">文字に飾りをつける方法（装飾）</h4>
+                <div className="p-3 bg-[#FAF6F0] rounded-xl text-xs space-y-2">
+                  <p>文字を装飾したいときは、<strong>本文の中で飾りたい文字をマウス（またはスマホの長押し）で選択し、</strong>上部にある「簡単かざりボタン」を押してください。</p>
+                  <table className="w-full text-left border-collapse mt-2">
+                    <thead>
+                      <tr className="border-b border-[#D7CCC8] text-[#8D6E63] text-[10px]">
+                        <th className="py-1">飾り</th>
+                        <th className="py-1">操作</th>
+                        <th className="py-1">見え方</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[11px] text-[#5D4037] divide-y divide-[#EFEBE9]">
+                      <tr>
+                        <td className="py-1.5 font-bold">太字</td>
+                        <td className="py-1.5">「あ (太字)」ボタン</td>
+                        <td className="py-1.5 font-bold text-[#3E2723]">あいうえお</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 font-bold">下線</td>
+                        <td className="py-1.5">「あ (下線)」ボタン</td>
+                        <td className="py-1.5"><span className="border-b border-[#8D6E63]">あいうえお</span></td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 font-bold">マーカー</td>
+                        <td className="py-1.5">「目立たせる」ボタン</td>
+                        <td className="py-1.5"><span className="bg-[#F0E6D2] px-1 rounded text-[#5D4037]">あいうえお</span></td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 font-bold">見出し</td>
+                        <td className="py-1.5">「◆ 見出しにする」ボタン</td>
+                        <td className="py-1.5 text-xs font-serif font-bold">◆ あいうえお</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p className="text-[10px] text-neutral-500 mt-1">※見出しを挿入すると、次のタブで自動的にその見出し専用の「写真設定枠」がつくられます。</p>
+                </div>
+              </div>
+
+            </div>
+
+            <button
+              onClick={() => setShowHelp(false)}
+              className="w-full bg-[#8D6E63] hover:bg-[#5D4037] text-white font-bold text-xs py-2.5 rounded-lg transition-all"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
