@@ -174,7 +174,7 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
       <tr><td>見出し</td><td>「見出し」欄に入力</td><td><span class="ex-heading">新しい門出</span></td></tr>
       <tr><td>太字</td><td>文字を選んで「太字」</td><td><span class="ex-bold">大切な一日</span></td></tr>
       <tr><td>下線</td><td>文字を選んで「下線」</td><td><span class="ex-under">大切な一日</span></td></tr>
-      <tr><td>目立たせる</td><td>文字を選んで「目立たせる」</td><td><span class="ex-mark">大切な一日</span></td></tr>
+      <tr><td>マーカー</td><td>文字を選んで「マーカー」</td><td><span class="ex-mark">大切な一日</span></td></tr>
       <tr><td>枠で囲む</td><td>文字を選んで「枠で囲む」</td><td><div class="ex-quote">ありがとう</div></td></tr>
     </table>
     <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">「＋ 見出しを追加」ボタンで見出しブロックを増やせます。</p>
@@ -315,7 +315,7 @@ function renderBlocks() {
       <div class="deco-toolbar">
         <button type="button" data-act="bold" data-id="${blk.id}">太字</button>
         <button type="button" data-act="under" data-id="${blk.id}">下線</button>
-        <button type="button" data-act="mark" data-id="${blk.id}">目立たせる</button>
+        <button type="button" data-act="mark" data-id="${blk.id}">マーカー</button>
         <button type="button" data-act="quote" data-id="${blk.id}">枠で囲む</button>
       </div>
       <textarea class="block-body-input" data-id="${blk.id}" placeholder="この見出しの本文を入力してください。文字を選択して上のボタンを押すと装飾できます。">${escapeHtml(blk.body)}</textarea>
@@ -511,8 +511,10 @@ function generateArticleHtml(templateStr) {
 
   const volPadded = String(state.volNo || "000").padStart(3, "0");
   const volId = `syacho-nikki-vol${volPadded}`;
-  const subtitleBlock = state.subtitleEn
-    ? `<div class="article-subtitle">— ${escapeHtml(state.subtitleEn)} —</div>` : "";
+  const sub = state.subtitleEn;
+  const isJpSub = /[぀-ヿ㐀-鿿ｦ-ﾟ]/.test(sub || "");
+  const subtitleBlock = sub
+    ? `<div class="article-subtitle${isJpSub ? " jp" : ""}">— ${escapeHtml(sub)} —</div>` : "";
 
   let html = templateStr;
   html = html.split("{{vol_number}}").join(volPadded);
