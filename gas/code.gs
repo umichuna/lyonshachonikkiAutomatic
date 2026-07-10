@@ -9,18 +9,23 @@
  * セットアップ手順は docs/SETUP.md を参照。
  * このファイルの内容をそのまま GAS プロジェクトの Code.gs に貼り付けて使用する。
  *
+ * 【連携シートの列構成(社長日記専用タブ・1行目ヘッダー)】
+ *   A: 更新日(= 掲載開始日)  B: 掲載終了日  C: タイトル  D: URL  E: 処理
+ *   ※ Vol番号の列は無い。Volはファイル名(volXXX.html)用。
+ *   ※ 採番は「タイトル列(C)のデータ行数 + 1」。
+ *
  * 必要な Script Properties(スクリプト プロパティ):
  *   GITHUB_TOKEN        … リポジトリの Contents:Read/Write 権限を持つ GitHub トークン
  *   GITHUB_OWNER        … 例: "umichuna"
- *   GITHUB_REPO         … 例: "lyonshachonikkiautomatic"
+ *   GITHUB_REPO         … 例: "lyonshachonikkiAutomatic"
  *   SHEET_ID            … 記録先スプレッドシートのID
- *   SHEET_NAME          … 記録先シート名(未設定時は "社長日記")
+ *   SHEET_NAME          … 記録先シート(タブ)名(未設定時は "社長日記")
  *   DISCORD_WEBHOOK_URL … エラー通知先(任意・未設定なら通知はスキップ)
  */
 
 const DEFAULT_SHEET_ID = "1XPMwWYqNSrJLu7x8RCmX4JGaaU1UE-Ep9v-w5bxC1rs";
 const DEFAULT_SHEET_NAME = "社長日記";
-const HEADER_ROW = ["Vol番号", "タイトル", "公開URL", "公開日", "ステータス"];
+const HEADER_ROW = ["更新日", "掲載終了日", "タイトル", "URL", "処理"];
 
 function getConfig_() {
   const props = PropertiesService.getScriptProperties();
@@ -68,9 +73,23 @@ function notifyDiscord_(cfg, message) {
   }
 }
 
-function normalizeVolDigits_(raw) {
-  const m = String(raw || "").match(/(\d+)/);
-  return m ? m[1].replace(/^0+/, "") || "0" : null;
+// ISO文字列(YYYY-MM-DD)を Date に変換。不正なら今日。
+function isoToDate_(iso) {
+  const p = String(iso || "").split("-");
+  if (p.length !== 3) return new Date();
+  const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+function formatCellDate_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy.MM.dd");
+  return String(v || "");
+}
+
+// URL(…/volXXX.html)から Vol番号を取り出す
+function volFromUrl_(url) {
+  const m = String(url || "").match(/vol(\d+)\.html/i);
+  return m ? m[1] : "";
 }
 
 /* ════════════════════════════════════════════════
@@ -81,33 +100,37 @@ function doGet(e) {
   try {
     const cfg = getConfig_();
     const sheet = getSheet_(cfg);
+    const lastRow = sheet.getLastRow();
 
     if (action === "next_vol") {
-      const values = sheet.getDataRange().getValues();
-      let maxVol = 0;
-      for (let i = 1; i < values.length; i++) {
-        const digits = normalizeVolDigits_(values[i][0]);
-        if (digits !== null) maxVol = Math.max(maxVol, parseInt(digits, 10));
+      // タイトル列(C)の2行目以降の非空セル数 + 1(専用タブ前提の行数ベース)
+      let count = 0;
+      if (lastRow >= 2) {
+        const titles = sheet.getRange(2, 3, lastRow - 1, 1).getValues();
+        count = titles.filter(r => String(r[0]).trim() !== "").length;
       }
-      const next = String(maxVol + 1).padStart(3, "0");
+      const next = String(count + 1).padStart(3, "0");
       return jsonOut_({ success: true, nextVol: next });
     }
 
     if (action === "history") {
-      const values = sheet.getDataRange().getValues();
       const items = [];
-      for (let i = 1; i < values.length; i++) {
-        const row = values[i];
-        if (!row[0]) continue;
-        items.push({
-          volNo: String(row[0]),
-          title: String(row[1] || ""),
-          url: String(row[2] || ""),
-          date: row[3] instanceof Date ? Utilities.formatDate(row[3], Session.getScriptTimeZone(), "yyyy.MM.dd") : String(row[3] || ""),
-          status: String(row[4] || ""),
+      if (lastRow >= 2) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+        rows.forEach(row => {
+          const title = String(row[2] || "");
+          const url = String(row[3] || "");
+          if (!title && !url) return; // 空行スキップ
+          items.push({
+            vol: volFromUrl_(url),
+            title: title,
+            startDate: formatCellDate_(row[0]),
+            endDate: formatCellDate_(row[1]),
+            url: url,
+          });
         });
       }
-      items.reverse();
+      items.reverse(); // 新しい順
       return jsonOut_({ success: true, items: items });
     }
 
@@ -119,7 +142,7 @@ function doGet(e) {
 
 /* ════════════════════════════════════════════════
    POST: 掲載処理
-   body: { volNo: "005", title: "...", dateStr: "2026.07.10", html: "<!DOCTYPE ...>" }
+   body: { volNo:"005", title:"...", startDate:"2026-07-10", endDate:"2036-07-10", html:"<!DOCTYPE ...>" }
    ════════════════════════════════════════════════ */
 function doPost(e) {
   let cfg;
@@ -133,7 +156,8 @@ function doPost(e) {
     const payload = JSON.parse(e.postData.contents);
     const volNo = String(payload.volNo || "").trim();
     const title = String(payload.title || "").trim();
-    const dateStr = String(payload.dateStr || "").trim();
+    const startDate = isoToDate_(payload.startDate);
+    const endDate = isoToDate_(payload.endDate);
     const html = String(payload.html || "");
 
     if (!volNo || !title || !html) {
@@ -141,15 +165,6 @@ function doPost(e) {
     }
 
     const sheet = getSheet_(cfg);
-    const volDigits = normalizeVolDigits_(volNo);
-
-    // ── 1. 重複チェック(シート側) ──
-    const values = sheet.getDataRange().getValues();
-    for (let i = 1; i < values.length; i++) {
-      if (normalizeVolDigits_(values[i][0]) === volDigits) {
-        return jsonOut_({ success: false, error: `Vol.${volNo} は既に掲載済みです。` });
-      }
-    }
 
     const fileName = `vol${volNo}.html`;
     const apiBase = `https://api.github.com/repos/${cfg.githubOwner}/${cfg.githubRepo}/contents/${fileName}`;
@@ -158,13 +173,13 @@ function doPost(e) {
       Accept: "application/vnd.github+json",
     };
 
-    // ── 2. 念のためGitHub側にも同名ファイルがないか確認(既存ファイルの上書き事故防止) ──
+    // ── 1. 重複ガード: GitHub上に同名ファイルが無いか(Vol列が無いのでこちらを正とする)──
     const checkRes = UrlFetchApp.fetch(apiBase, { headers: authHeaders, muteHttpExceptions: true });
     if (checkRes.getResponseCode() === 200) {
-      return jsonOut_({ success: false, error: `GitHub上に ${fileName} が既に存在します。` });
+      return jsonOut_({ success: false, error: `Vol.${volNo}(${fileName})は既に掲載済みです。` });
     }
 
-    // ── 3. GitHubへcommit ──
+    // ── 2. GitHubへcommit ──
     const commitRes = UrlFetchApp.fetch(apiBase, {
       method: "put",
       headers: authHeaders,
@@ -182,9 +197,9 @@ function doPost(e) {
 
     const publishedUrl = `https://${cfg.githubOwner}.github.io/${cfg.githubRepo}/${fileName}`;
 
-    // ── 4. スプレッドシートへ1行追記 ──
+    // ── 3. スプレッドシートへ1行追記(A:更新日/開始日, B:掲載終了日, C:タイトル, D:URL, E:処理[空])──
     try {
-      sheet.appendRow([`Vol.${volNo}`, title, publishedUrl, dateStr, "公開済み"]);
+      sheet.appendRow([startDate, endDate, title, publishedUrl, ""]);
     } catch (sheetErr) {
       notifyDiscord_(cfg, `⚠️ Vol.${volNo} はGitHubへの公開に成功しましたが、スプレッドシートへの記録に失敗しました。手動で追記してください。\nURL: ${publishedUrl}\nエラー: ${sheetErr.message}`);
       return jsonOut_({ success: false, error: "GitHubへの公開は完了しましたが、スプレッドシートへの記録に失敗しました。担当者へ連絡してください。" });
