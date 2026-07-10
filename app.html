@@ -41,7 +41,15 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 .modal-box { background: #fff; border-radius: 10px; padding: 28px; max-width: 480px; width: 100%; max-height: 80vh; overflow-y: auto; }
 .modal-box h3 { font-size: 16px; margin-bottom: 16px; color: var(--crust-dark); }
 .modal-box table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.modal-box td { padding: 8px 6px; border-bottom: 1px solid var(--line); }
+.modal-box th { text-align: left; font-size: 12px; color: var(--ink-soft); padding: 8px 6px; border-bottom: 2px solid var(--line); white-space: nowrap; }
+.modal-box td { padding: 10px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.modal-box td:first-child { font-weight: 700; white-space: nowrap; }
+/* 早見表の表示例 */
+.ex-bold { font-weight: 700; }
+.ex-under { text-decoration: underline; text-underline-offset: 3px; }
+.ex-mark { background: linear-gradient(transparent 60%, rgba(201,166,107,0.35) 60%); font-weight: 500; }
+.ex-heading { font-weight: 700; color: var(--crust-dark); border-left: 3px solid var(--crust); padding-left: 8px; }
+.ex-quote { background: var(--paper); border: 1px solid var(--line); border-top: 3px solid var(--crust); border-radius: 2px; padding: 8px 10px; text-align: center; font-weight: 700; color: var(--crust-dark); font-size: 13px; }
 .modal-actions { margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end; }
 .btn { padding: 10px 20px; border-radius: 6px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; }
 .btn.primary { background: var(--crust); border-color: var(--crust); color: #fff; }
@@ -114,8 +122,8 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
       </div>
     </div>
     <div class="field">
-      <label>サブタイトル(英語・任意)</label>
-      <input type="text" id="subtitleInput" placeholder="the day I knocked on the door of my dream">
+      <label>サブタイトル(任意)</label>
+      <input type="text" id="subtitleInput" placeholder="日本語でも英語でもOK(空欄可)">
     </div>
     <div class="row">
       <div class="field">
@@ -162,13 +170,14 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
   <div class="modal-box">
     <h3>入力方法 早見表</h3>
     <table>
-      <tr><td>見出し</td><td>各ブロック上部の「見出し」欄に直接入力します</td></tr>
-      <tr><td>太字</td><td>本文の文字を選択して、本文の上の「太字」ボタンを押す</td></tr>
-      <tr><td>下線</td><td>本文の文字を選択して「下線」ボタンを押す</td></tr>
-      <tr><td>目立たせる</td><td>本文の文字を選択して「目立たせる」ボタンを押す(マーカー)</td></tr>
-      <tr><td>枠で囲む</td><td>本文の文字を選択して「枠で囲む」ボタンを押す(引用)</td></tr>
-      <tr><td>見出しの追加</td><td>「＋ 見出しを追加」ボタンでブロックを増やせます</td></tr>
+      <tr><th>装飾</th><th>やり方</th><th>こう表示されます</th></tr>
+      <tr><td>見出し</td><td>「見出し」欄に入力</td><td><span class="ex-heading">新しい門出</span></td></tr>
+      <tr><td>太字</td><td>文字を選んで「太字」</td><td><span class="ex-bold">大切な一日</span></td></tr>
+      <tr><td>下線</td><td>文字を選んで「下線」</td><td><span class="ex-under">大切な一日</span></td></tr>
+      <tr><td>目立たせる</td><td>文字を選んで「目立たせる」</td><td><span class="ex-mark">大切な一日</span></td></tr>
+      <tr><td>枠で囲む</td><td>文字を選んで「枠で囲む」</td><td><div class="ex-quote">ありがとう</div></td></tr>
     </table>
+    <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">「＋ 見出しを追加」ボタンで見出しブロックを増やせます。</p>
     <div class="modal-actions"><button class="btn primary" id="closeHelpBtn">閉じる</button></div>
   </div>
 </div>
@@ -701,11 +710,9 @@ function renderHistory(items) {
   }
   box.innerHTML = items.map(it => {
     const vol = it.vol ? `<span class="history-vol">Vol.${escapeHtml(it.vol)}</span>` : "";
-    const period = (it.startDate || it.endDate)
-      ? `<div class="history-meta">掲載期間: ${escapeHtml(it.startDate || "?")} 〜 ${escapeHtml(it.endDate || "?")}</div>` : "";
     const open = it.url
       ? `<a class="history-open" href="${escapeAttr(it.url)}" target="_blank" rel="noopener">記事を開く</a>` : "";
-    return `<div class="history-card"><div class="hc-top">${vol}<span class="history-title">${escapeHtml(it.title || "(無題)")}</span></div>${period}${open}</div>`;
+    return `<div class="history-card"><div class="hc-top">${vol}<span class="history-title">${escapeHtml(it.title || "(無題)")}</span></div>${open}</div>`;
   }).join("");
 }
 
