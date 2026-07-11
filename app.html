@@ -896,6 +896,7 @@ function loadDraftIntoForm() {
 const TUTORIAL_HIDE_KEY = "shachonikki_tutorial_hide";
 const TUTORIAL_STEPS = [
   { tab: "input", selector: null, title: "ようこそ", text: "「社長日記」をこの画面で作って公開できます。<br>作る → 見て確かめる → 掲載する、の順です。「つぎへ」を押して進みましょう。" },
+  { tab: "input", selector: ".tabs", title: "画面の切り替え", text: "上の①②③を押すと画面が切り替わります。<br>①記事作成で書き、②プレビュー・掲載で見て公開、③掲載履歴で過去の記事を確認できます。" },
   { tab: "input", selector: "#volNoInput", title: "Vol(号数)", text: "記事の番号です。ふだんは自動で入ります。直したいときは、ここを押して書き直せます。" },
   { tab: "input", selector: "#titleInput", title: "タイトル", text: "記事の題名を入れます。<br>例:「新しい門出」" },
   { tab: "input", selector: "#subtitleInput", title: "サブタイトル", text: "小さな副題です。入れても、入れなくても大丈夫です。" },
@@ -906,11 +907,11 @@ const TUTORIAL_STEPS = [
   { tab: "input", selector: "#blocksContainer label.btn", title: "写真を入れる", text: "「写真を追加」を押すと写真を選べます。<br>写真は全部で4枚まで、1つの見出しに2枚までです。<br>それ以上入れたいときは、城野さんに連絡してください。" },
   { tab: "input", selector: "#addBlockBtn", title: "見出しを増やす", text: "話題が変わるときは、このボタンで見出しのまとまりをもう1つ増やせます。" },
   { tab: "input", selector: "#helpBtn", title: "入力方法の早見表", text: "文字のかざり方を忘れたら、いつでもここで見られます。" },
-  { tab: "preview", selector: "#previewFrame", title: "仕上がりを確認", text: "「プレビュー・掲載」では、公開される見た目をそのまま確認できます。" },
+  { tab: "preview", selector: "#previewFrame", title: "仕上がりを確認", text: "②プレビュー・掲載を押すと、この画面になります。<br>公開される見た目をそのまま確認できます。" },
   { tab: "preview", selector: "#publishBtn", title: "掲載する(公開)", text: "よければ「掲載する」を押すと公開されます。<br>押すと「スタッフ全員に通知されます。よろしいですか?」と出ます。よければ「OK」を押してください。<br><b>※今は押さないでください。</b>" },
   { tab: "preview", selector: null, title: "掲載したあとに直したいとき", text: "掲載のあとに出る「この記事を修正する」を押すと、もう一度直せます(号数はそのまま)。直して「掲載する」を押すと上書きされます。<br>このとき、スタッフへの通知は飛びません。<br>別の記事を新しく作るときは「新しい記事を作る」を押します。" },
   { tab: "preview", selector: null, title: "メッセージが出たときは", text: "「見出し/本文が空です」→ その欄に文字を入れて、もう一度「掲載する」。<br>「写真は4枚まで/1見出しに2枚まで」→ 写真を減らすか、城野さんに連絡。<br>「写真が1枚もありません…」→ 写真がなければ「はい」。入れ忘れなら「いいえ」を押して、①の画面で写真を追加。" },
-  { tab: "history", selector: "#historyBox", title: "掲載履歴", text: "これまでに掲載した記事の一覧です。ここから記事を開いたり、記録の表を見たりできます。" },
+  { tab: "history", selector: "#historyBox", title: "掲載履歴", text: "③掲載履歴を押すと、これまでに掲載した記事の一覧が見られます。<br>ここから記事を開いたり、記録の表を見たりできます。" },
   { tab: "input", selector: null, title: "これで準備OK", text: "おつかれさまでした。<br>もう一度見たいときは、上の「❓ 使い方」からいつでも見られます。<br>わからないことは、城野さん または LINE でご連絡ください。" },
 ];
 
@@ -918,15 +919,23 @@ let tourIndex = 0, tourActive = false, tourTarget = null;
 
 function positionTourRing() {
   const ring = document.getElementById("tourRing");
+  const card = document.getElementById("tourCard");
   if (!tourActive || !tourTarget) { ring.style.display = "none"; return; }
   const r = tourTarget.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) { ring.style.display = "none"; return; }
   const pad = 6;
+  let top = r.top - pad;
+  if (top < 8) top = 8;
+  let bottom = r.bottom + pad;
+  // 説明カードの上端より下にはみ出さないようクランプ(背の高い対象がカードの裏に隠れないように)
+  const cardTop = card.classList.contains("show") ? card.getBoundingClientRect().top : window.innerHeight;
+  const maxBottom = cardTop - 8;
+  if (bottom > maxBottom) bottom = maxBottom;
   ring.style.display = "block";
-  ring.style.top = (r.top - pad) + "px";
+  ring.style.top = top + "px";
   ring.style.left = (r.left - pad) + "px";
   ring.style.width = (r.width + pad * 2) + "px";
-  ring.style.height = (r.height + pad * 2) + "px";
+  ring.style.height = Math.max(0, bottom - top) + "px";
 }
 
 function showTourStep(i) {
@@ -944,12 +953,26 @@ function showTourStep(i) {
   setTimeout(() => {
     tourTarget = step.selector ? document.querySelector(step.selector) : null;
     if (tourTarget) {
-      tourTarget.scrollIntoView({ block: "center", behavior: "smooth" });
-      setTimeout(positionTourRing, 300);
+      scrollTourTargetIntoView();
+      setTimeout(positionTourRing, 380);
     } else {
       document.getElementById("tourRing").style.display = "none";
     }
   }, 80);
+}
+
+// 対象を「下部カードより上の領域」の中央へスクロール(カードの裏に隠れないように)
+function scrollTourTargetIntoView() {
+  if (!tourTarget) return;
+  const card = document.getElementById("tourCard");
+  const cardH = card.classList.contains("show") ? card.offsetHeight : 0;
+  const availTop = 64;                                   // 上部(ヘッダー)の余白
+  const availH = Math.max(120, window.innerHeight - (cardH + 16) - availTop);
+  const rect = tourTarget.getBoundingClientRect();
+  let delta;
+  if (rect.height >= availH) delta = rect.top - availTop;               // 背の高い対象は上端合わせ
+  else delta = (rect.top + rect.height / 2) - (availTop + availH / 2);  // それ以外は上部領域の中央
+  window.scrollBy({ top: delta, behavior: "smooth" });
 }
 
 function startTour() {
@@ -957,6 +980,8 @@ function startTour() {
   tourActive = true;
   document.getElementById("tourBlocker").classList.add("show");
   document.getElementById("tourCard").classList.add("show");
+  // 下部カード分の余白を確保(最下部の要素もカードより上へスクロールできるように)
+  document.querySelector(".wrap").style.paddingBottom = Math.round(window.innerHeight * 0.6) + "px";
   window.addEventListener("resize", positionTourRing);
   window.addEventListener("scroll", positionTourRing, true);
   showTourStep(0);
@@ -967,6 +992,7 @@ function endTour() {
   document.getElementById("tourBlocker").classList.remove("show");
   document.getElementById("tourCard").classList.remove("show");
   document.getElementById("tourRing").style.display = "none";
+  document.querySelector(".wrap").style.paddingBottom = "";  // 元に戻す
   window.removeEventListener("resize", positionTourRing);
   window.removeEventListener("scroll", positionTourRing, true);
   try { localStorage.setItem(TUTORIAL_HIDE_KEY, "1"); } catch (e) {}
