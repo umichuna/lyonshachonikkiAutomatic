@@ -159,6 +159,7 @@ function doPost(e) {
     const startDate = isoToDate_(payload.startDate);
     const endDate = isoToDate_(payload.endDate);
     const html = String(payload.html || "");
+    const isUpdate = payload.isUpdate === true;   // 掲載済み記事の上書き更新か
 
     if (!volNo || !title || !html) {
       return jsonOut_({ success: false, error: "volNo / title / html は必須です。" });
@@ -173,22 +174,29 @@ function doPost(e) {
       Accept: "application/vnd.github+json",
     };
 
-    // ── 1. 重複ガード: GitHub上に同名ファイルが無いか(Vol列が無いのでこちらを正とする)──
+    // ── 1. 既存ファイルの有無・sha を取得(更新時は上書きに sha が必要)──
+    let existingSha = null;
     const checkRes = UrlFetchApp.fetch(apiBase, { headers: authHeaders, muteHttpExceptions: true });
     if (checkRes.getResponseCode() === 200) {
-      return jsonOut_({ success: false, error: `Vol.${volNo}(${fileName})は既に掲載済みです。` });
+      existingSha = JSON.parse(checkRes.getContentText()).sha;
+    }
+    // 新規掲載なのに既に存在 → 誤上書き防止で拒否
+    if (existingSha && !isUpdate) {
+      return jsonOut_({ success: false, error: `Vol.${volNo}(${fileName})は既に掲載済みです。修正する場合はアプリの「この記事を修正する」から操作してください。` });
     }
 
-    // ── 2. GitHubへcommit ──
+    // ── 2. GitHubへcommit(更新時は sha を付けて上書き)──
+    const commitPayload = {
+      message: isUpdate ? `Vol.${volNo} を更新` : `Vol.${volNo} を公開`,
+      content: Utilities.base64Encode(html, Utilities.Charset.UTF_8),
+      branch: "main",
+    };
+    if (existingSha) commitPayload.sha = existingSha;
     const commitRes = UrlFetchApp.fetch(apiBase, {
       method: "put",
       headers: authHeaders,
       contentType: "application/json",
-      payload: JSON.stringify({
-        message: `Vol.${volNo} を公開`,
-        content: Utilities.base64Encode(html, Utilities.Charset.UTF_8),
-        branch: "main",
-      }),
+      payload: JSON.stringify(commitPayload),
       muteHttpExceptions: true,
     });
     if (commitRes.getResponseCode() >= 300) {
@@ -197,12 +205,31 @@ function doPost(e) {
 
     const publishedUrl = `https://${cfg.githubOwner}.github.io/${cfg.githubRepo}/${fileName}`;
 
-    // ── 3. スプレッドシートへ1行追記(A:更新日/開始日, B:掲載終了日, C:タイトル, D:URL, E:処理[空])──
+    // ── 3. スプレッドシート ──
+    //  更新: URL(D列)一致の既存行を探し A/B/C のみ上書き(D=URL・E=処理 は触らない
+    //        → 処理="済" が保たれ再通知なし・行も増えない)。
+    //  新規: 1行追記(E=空 → 既存通知システムが未処理として拾い、処理後に自分で「済」にする)。
     try {
-      sheet.appendRow([startDate, endDate, title, publishedUrl, ""]);
+      let updated = false;
+      if (isUpdate) {
+        const values = sheet.getDataRange().getValues();
+        for (let i = 1; i < values.length; i++) {
+          if (String(values[i][3]) === publishedUrl) {
+            const row = i + 1;
+            sheet.getRange(row, 1).setValue(startDate); // A 更新日/開始日
+            sheet.getRange(row, 2).setValue(endDate);   // B 掲載終了日
+            sheet.getRange(row, 3).setValue(title);     // C タイトル
+            updated = true;
+            break;
+          }
+        }
+      }
+      if (!updated) {
+        sheet.appendRow([startDate, endDate, title, publishedUrl, ""]);
+      }
     } catch (sheetErr) {
-      notifyDiscord_(cfg, `⚠️ Vol.${volNo} はGitHubへの公開に成功しましたが、スプレッドシートへの記録に失敗しました。手動で追記してください。\nURL: ${publishedUrl}\nエラー: ${sheetErr.message}`);
-      return jsonOut_({ success: false, error: "GitHubへの公開は完了しましたが、スプレッドシートへの記録に失敗しました。担当者へ連絡してください。" });
+      notifyDiscord_(cfg, `⚠️ Vol.${volNo} はGitHubへの${isUpdate ? "更新" : "公開"}に成功しましたが、スプレッドシートへの記録に失敗しました。手動で確認してください。\nURL: ${publishedUrl}\nエラー: ${sheetErr.message}`);
+      return jsonOut_({ success: false, error: "GitHubへの反映は完了しましたが、スプレッドシートへの記録に失敗しました。担当者へ連絡してください。" });
     }
 
     return jsonOut_({ success: true, url: publishedUrl });

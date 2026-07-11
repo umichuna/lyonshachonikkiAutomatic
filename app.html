@@ -83,6 +83,7 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 .preview-frame { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .publish-box { margin-top: 20px; padding: 20px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; text-align: center; }
 .published-url { word-break: break-all; font-size: 13px; color: var(--crust-dark); margin-top: 10px; }
+#postPublishActions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--berry); color: #fff; padding: 12px 22px; border-radius: 8px; font-size: 13px; z-index: 400; display: none; max-width: 90%; }
 .toast.show { display: block; }
 .toast.success { background: var(--leaf); }
@@ -96,6 +97,30 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 .history-meta { font-size: 12px; color: var(--ink-soft); margin-bottom: 8px; }
 .history-open { display: inline-block; font-size: 12px; color: var(--crust-dark); border: 1px solid var(--crust); border-radius: 16px; padding: 4px 14px; text-decoration: none; }
 .history-open:hover { background: var(--crust); color: #fff; }
+
+/* ── チュートリアル(使い方ツアー) ── */
+.tour-launch { text-align: center; margin-bottom: 16px; }
+.tour-launch button { font-size: 14px; padding: 10px 20px; border: 1px solid var(--crust); color: var(--crust-dark); background: #fff; border-radius: 22px; cursor: pointer; font-family: inherit; font-weight: 700; }
+.tour-launch button:hover { background: var(--paper); }
+.modal-box.big p { font-size: 15px; line-height: 1.9; }
+.modal-box .big-check { display: flex; align-items: center; gap: 10px; font-size: 15px; margin-top: 16px; cursor: pointer; }
+.modal-box .big-check input { width: 22px; height: 22px; }
+.modal-box .big-actions { margin-top: 22px; display: flex; gap: 12px; }
+.modal-box .big-actions .btn { flex: 1; padding: 15px 10px; font-size: 16px; }
+#tourBlocker { position: fixed; inset: 0; z-index: 499; display: none; }
+#tourBlocker.show { display: block; }
+#tourRing { position: fixed; z-index: 500; border: 3px solid var(--berry); border-radius: 10px; box-shadow: 0 0 0 9999px rgba(58,42,30,0.62); pointer-events: none; display: none; }
+#tourCard { position: fixed; left: 0; right: 0; bottom: 0; z-index: 501; background: #fff; border-top: 4px solid var(--crust); border-radius: 18px 18px 0 0; padding: 18px 20px 22px; box-shadow: 0 -6px 28px rgba(58,42,30,0.28); display: none; }
+#tourCard.show { display: block; }
+#tourProgress { font-size: 14px; color: var(--crust-dark); font-weight: 700; margin-bottom: 6px; }
+#tourTitle { font-size: 20px; font-weight: 800; color: var(--ink); margin-bottom: 10px; }
+#tourText { font-size: 16px; line-height: 2.0; color: var(--ink); margin-bottom: 18px; }
+#tourText b { color: var(--crust-dark); }
+.tour-actions { display: flex; gap: 10px; }
+.tour-actions .btn { padding: 15px 10px; font-size: 16px; font-weight: 700; }
+.tour-actions #tourPrev, .tour-actions #tourNext { flex: 1; }
+.tour-actions #tourClose { flex: 0 0 auto; }
+@media (max-width: 600px) { #tourTitle { font-size: 19px; } #tourText { font-size: 16px; } }
 </style>
 </head>
 <body>
@@ -103,6 +128,10 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 <div class="wrap">
   <h1 class="app-title">社長日記 投稿ツール</h1>
   <div class="app-sub">見出し・本文・写真を入れて「掲載する」を押すだけで公開されます</div>
+
+  <div class="tour-launch">
+    <button id="tourBtn" type="button">❓ 使い方(チュートリアル)を見る</button>
+  </div>
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="input">① 記事作成</button>
@@ -155,6 +184,10 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
       <div id="publishMessage">プレビューをご確認いただき、修正点がなければ「掲載する」を押してください。</div>
       <button class="btn primary" id="publishBtn" style="margin-top:14px;">掲載する</button>
       <div class="published-url" id="publishedUrlBox" style="display:none;"></div>
+      <div id="postPublishActions" style="display:none;">
+        <button class="btn" id="editArticleBtn">この記事を修正する</button>
+        <button class="btn" id="newArticleBtn">新しい記事を作る</button>
+      </div>
     </div>
 
     <div class="line-note">不具合等ございましたらLINEにてご連絡ください。</div>
@@ -196,6 +229,33 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
   </div>
 </div>
 
+<!-- チュートリアル: 初回確認モーダル -->
+<div class="modal-backdrop" id="tourPromptModal">
+  <div class="modal-box big">
+    <h3>使い方を見ますか?</h3>
+    <p>このアプリの使い方を、はじめから順番にやさしくご案内します。<br>はじめての方は「はい、見る」をおすすめします。</p>
+    <label class="big-check"><input type="checkbox" id="tourHideCheck"> 次回から表示しない</label>
+    <div class="big-actions">
+      <button class="btn" id="tourPromptNo">いいえ</button>
+      <button class="btn primary" id="tourPromptYes">はい、見る</button>
+    </div>
+  </div>
+</div>
+
+<!-- チュートリアル: スポットライト+説明カード -->
+<div id="tourBlocker"></div>
+<div id="tourRing"></div>
+<div id="tourCard">
+  <div id="tourProgress"></div>
+  <div id="tourTitle"></div>
+  <div id="tourText"></div>
+  <div class="tour-actions">
+    <button class="btn" id="tourClose">とじる</button>
+    <button class="btn" id="tourPrev">← もどる</button>
+    <button class="btn primary" id="tourNext">つぎへ →</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -223,6 +283,7 @@ let state = {
   blocks: [],      // [{ id, heading, body, photos: [{id, dataUrl, caption}] }]
   published: false,
   publishedUrl: "",
+  isUpdate: false,   // 掲載済み記事を修正(上書き更新)している最中か
 };
 let templateCache = null;
 let saveTimer = null;
@@ -656,11 +717,14 @@ document.getElementById("publishBtn").addEventListener("click", async () => {
     showToast("GASのURLが未設定です。docs/SETUP.md の手順に従って設定してください。", false);
     return;
   }
-  if (!confirm("掲載処理を実行します。実行するとスタッフ全員に通知されます。よろしいですか?")) return;
+  const confirmMsg = state.isUpdate
+    ? "この記事を上書き更新します。スタッフへの通知は行いません。よろしいですか?"
+    : "掲載処理を実行します。実行するとスタッフ全員に通知されます。よろしいですか?";
+  if (!confirm(confirmMsg)) return;
 
   const publishBtn = document.getElementById("publishBtn");
   publishBtn.disabled = true;
-  document.getElementById("publishMessage").textContent = "掲載処理中です…";
+  document.getElementById("publishMessage").textContent = state.isUpdate ? "更新処理中です…" : "掲載処理中です…";
 
   try {
     const tmpl = await loadTemplate();
@@ -671,6 +735,7 @@ document.getElementById("publishBtn").addEventListener("click", async () => {
       title: state.title,
       startDate: state.startDate,
       endDate: state.endDate,
+      isUpdate: !!state.isUpdate,
       html,
     };
     const res = await fetch(GAS_URL, {
@@ -685,21 +750,58 @@ document.getElementById("publishBtn").addEventListener("click", async () => {
       showToast(data.error || "掲載処理に失敗しました。", false);
       return;
     }
+    const wasUpdate = state.isUpdate;
     state.published = true;
     state.publishedUrl = data.url;
     saveDraft();
-    document.getElementById("publishMessage").textContent = `Vol.${volPadded} を掲載しました。`;
+    document.getElementById("publishMessage").textContent = `Vol.${volPadded} を${wasUpdate ? "更新" : "掲載"}しました。`;
     const urlBox = document.getElementById("publishedUrlBox");
     urlBox.style.display = "block";
     urlBox.innerHTML = `<a href="${escapeAttr(data.url)}" target="_blank" rel="noopener">${escapeHtml(data.url)}</a>`;
     setInputsDisabled(true);
-    showToast("掲載が完了しました", true);
+    document.getElementById("postPublishActions").style.display = "flex";
+    showToast(wasUpdate ? "更新が完了しました" : "掲載が完了しました", true);
   } catch (e) {
     document.getElementById("publishMessage").textContent = "プレビューをご確認いただき、修正点がなければ「掲載する」を押してください。";
     publishBtn.disabled = false;
     showToast("通信エラーが発生しました: " + e.message, false);
   }
 });
+
+/* ── 掲載後: この記事を修正する / 新しい記事を作る ── */
+function enterEditMode() {
+  state.published = false;
+  state.isUpdate = true;
+  setInputsDisabled(false);
+  volNoInput.disabled = true;            // 上書き対象を間違えないようVol番号は固定
+  document.getElementById("publishBtn").disabled = false;
+  document.getElementById("postPublishActions").style.display = "none";
+  document.getElementById("publishMessage").textContent = "修正したら、もう一度「掲載する」を押すと上書き更新されます(新しい行は増えません)。";
+  document.querySelector('.tab-btn[data-tab="input"]').click();
+  showToast("修正できます。直したら「掲載する」を押してください", true);
+}
+
+function startNewArticle() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  state = {
+    volNo: "", title: "", subtitleEn: "", startDate: "", endDate: "",
+    blocks: [makeBlock()], published: false, publishedUrl: "", isUpdate: false,
+  };
+  applyDateDefaults();
+  document.getElementById("publishedUrlBox").style.display = "none";
+  document.getElementById("postPublishActions").style.display = "none";
+  document.getElementById("publishBtn").disabled = false;
+  document.getElementById("publishMessage").textContent = "プレビューをご確認いただき、修正点がなければ「掲載する」を押してください。";
+  loadDraftIntoForm();
+  setInputsDisabled(false);
+  volNoInput.disabled = false;
+  fetchNextVol();
+  document.querySelector('.tab-btn[data-tab="input"]').click();
+  showToast("新しい記事を作成できます", true);
+}
+
+document.getElementById("editArticleBtn").addEventListener("click", enterEditMode);
+document.getElementById("newArticleBtn").addEventListener("click", startNewArticle);
 
 /* ════════════════════════════════════════════════
    掲載履歴
@@ -778,14 +880,122 @@ function loadDraftIntoForm() {
   if (state.published) {
     setInputsDisabled(true);
     document.getElementById("publishBtn").disabled = true;
-    document.getElementById("publishMessage").textContent = `Vol.${String(state.volNo).padStart(3, "0")} は掲載済みです。`;
+    document.getElementById("publishMessage").textContent = `Vol.${String(state.volNo).padStart(3, "0")} は掲載済みです。修正するときは下の「この記事を修正する」を押してください。`;
     if (state.publishedUrl) {
       const urlBox = document.getElementById("publishedUrlBox");
       urlBox.style.display = "block";
       urlBox.innerHTML = `<a href="${escapeAttr(state.publishedUrl)}" target="_blank" rel="noopener">${escapeHtml(state.publishedUrl)}</a>`;
     }
+    document.getElementById("postPublishActions").style.display = "flex";
   }
 }
+
+/* ════════════════════════════════════════════════
+   チュートリアル(使い方ツアー)
+   ════════════════════════════════════════════════ */
+const TUTORIAL_HIDE_KEY = "shachonikki_tutorial_hide";
+const TUTORIAL_STEPS = [
+  { tab: "input", selector: null, title: "ようこそ", text: "「社長日記」をこの画面で作って公開できます。<br>作る → 見て確かめる → 掲載する、の順です。「つぎへ」を押して進みましょう。" },
+  { tab: "input", selector: "#volNoInput", title: "Vol(号数)", text: "記事の番号です。ふだんは自動で入ります。直したいときは、ここを押して書き直せます。" },
+  { tab: "input", selector: "#titleInput", title: "タイトル", text: "記事の題名を入れます。<br>例:「新しい門出」" },
+  { tab: "input", selector: "#subtitleInput", title: "サブタイトル", text: "小さな副題です。入れても、入れなくても大丈夫です。" },
+  { tab: "input", selector: "#startDateInput", title: "掲載する期間", text: "「開始日」は今日、「終了日」は10年後が、はじめから入っています。<br>とくに変えなくて大丈夫です。" },
+  { tab: "input", selector: ".block-heading-input", title: "見出し", text: "記事の小見出しを入れます。<br>例:「おはよう」" },
+  { tab: "input", selector: ".block-body-input", title: "本文", text: "ここに日記の文章を書きます。" },
+  { tab: "input", selector: ".deco-toolbar", title: "文字をかざる", text: "本文の文字を指でなぞって選んでから、このボタンを押すと、<b>太字</b>・下線・マーカー・枠で目立たせられます。<br>文字を選ばずに押すと「本文を選択してから押してください」と出ます。文字を選んでから押してください。" },
+  { tab: "input", selector: "#blocksContainer label.btn", title: "写真を入れる", text: "「写真を追加」を押すと写真を選べます。<br>写真は全部で4枚まで、1つの見出しに2枚までです。<br>それ以上入れたいときは、城野さんに連絡してください。" },
+  { tab: "input", selector: "#addBlockBtn", title: "見出しを増やす", text: "話題が変わるときは、このボタンで見出しのまとまりをもう1つ増やせます。" },
+  { tab: "input", selector: "#helpBtn", title: "入力方法の早見表", text: "文字のかざり方を忘れたら、いつでもここで見られます。" },
+  { tab: "preview", selector: "#previewFrame", title: "仕上がりを確認", text: "「プレビュー・掲載」では、公開される見た目をそのまま確認できます。" },
+  { tab: "preview", selector: "#publishBtn", title: "掲載する(公開)", text: "よければ「掲載する」を押すと公開されます。<br>押すと「スタッフ全員に通知されます。よろしいですか?」と出ます。よければ「OK」を押してください。<br><b>※今は押さないでください。</b>" },
+  { tab: "preview", selector: null, title: "掲載したあとに直したいとき", text: "掲載のあとに出る「この記事を修正する」を押すと、もう一度直せます(号数はそのまま)。直して「掲載する」を押すと上書きされます。<br>このとき、スタッフへの通知は飛びません。<br>別の記事を新しく作るときは「新しい記事を作る」を押します。" },
+  { tab: "preview", selector: null, title: "メッセージが出たときは", text: "「見出し/本文が空です」→ その欄に文字を入れて、もう一度「掲載する」。<br>「写真は4枚まで/1見出しに2枚まで」→ 写真を減らすか、城野さんに連絡。<br>「写真が1枚もありません…」→ 写真がなければ「はい」。入れ忘れなら「いいえ」を押して、①の画面で写真を追加。" },
+  { tab: "history", selector: "#historyBox", title: "掲載履歴", text: "これまでに掲載した記事の一覧です。ここから記事を開いたり、記録の表を見たりできます。" },
+  { tab: "input", selector: null, title: "これで準備OK", text: "おつかれさまでした。<br>もう一度見たいときは、上の「❓ 使い方」からいつでも見られます。<br>わからないことは、城野さん または LINE でご連絡ください。" },
+];
+
+let tourIndex = 0, tourActive = false, tourTarget = null;
+
+function positionTourRing() {
+  const ring = document.getElementById("tourRing");
+  if (!tourActive || !tourTarget) { ring.style.display = "none"; return; }
+  const r = tourTarget.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) { ring.style.display = "none"; return; }
+  const pad = 6;
+  ring.style.display = "block";
+  ring.style.top = (r.top - pad) + "px";
+  ring.style.left = (r.left - pad) + "px";
+  ring.style.width = (r.width + pad * 2) + "px";
+  ring.style.height = (r.height + pad * 2) + "px";
+}
+
+function showTourStep(i) {
+  tourIndex = i;
+  const step = TUTORIAL_STEPS[i];
+  if (step.tab) {
+    const tb = document.querySelector('.tab-btn[data-tab="' + step.tab + '"]');
+    if (tb && !tb.classList.contains("active")) tb.click();
+  }
+  document.getElementById("tourProgress").textContent = (i + 1) + " / " + TUTORIAL_STEPS.length;
+  document.getElementById("tourTitle").textContent = step.title;
+  document.getElementById("tourText").innerHTML = step.text;
+  document.getElementById("tourPrev").style.visibility = (i === 0) ? "hidden" : "visible";
+  document.getElementById("tourNext").textContent = (i === TUTORIAL_STEPS.length - 1) ? "おわり" : "つぎへ →";
+  setTimeout(() => {
+    tourTarget = step.selector ? document.querySelector(step.selector) : null;
+    if (tourTarget) {
+      tourTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+      setTimeout(positionTourRing, 300);
+    } else {
+      document.getElementById("tourRing").style.display = "none";
+    }
+  }, 80);
+}
+
+function startTour() {
+  document.getElementById("tourPromptModal").classList.remove("show");
+  tourActive = true;
+  document.getElementById("tourBlocker").classList.add("show");
+  document.getElementById("tourCard").classList.add("show");
+  window.addEventListener("resize", positionTourRing);
+  window.addEventListener("scroll", positionTourRing, true);
+  showTourStep(0);
+}
+
+function endTour() {
+  tourActive = false; tourTarget = null;
+  document.getElementById("tourBlocker").classList.remove("show");
+  document.getElementById("tourCard").classList.remove("show");
+  document.getElementById("tourRing").style.display = "none";
+  window.removeEventListener("resize", positionTourRing);
+  window.removeEventListener("scroll", positionTourRing, true);
+  try { localStorage.setItem(TUTORIAL_HIDE_KEY, "1"); } catch (e) {}
+}
+
+document.getElementById("tourNext").addEventListener("click", () => {
+  if (tourIndex >= TUTORIAL_STEPS.length - 1) endTour();
+  else showTourStep(tourIndex + 1);
+});
+document.getElementById("tourPrev").addEventListener("click", () => {
+  if (tourIndex > 0) showTourStep(tourIndex - 1);
+});
+document.getElementById("tourClose").addEventListener("click", endTour);
+document.getElementById("tourBtn").addEventListener("click", startTour);
+
+function maybeShowTourPrompt() {
+  let hide = false;
+  try { hide = localStorage.getItem(TUTORIAL_HIDE_KEY) === "1"; } catch (e) {}
+  if (hide) return;
+  document.getElementById("tourPromptModal").classList.add("show");
+}
+document.getElementById("tourPromptYes").addEventListener("click", () => {
+  if (document.getElementById("tourHideCheck").checked) { try { localStorage.setItem(TUTORIAL_HIDE_KEY, "1"); } catch (e) {} }
+  startTour();
+});
+document.getElementById("tourPromptNo").addEventListener("click", () => {
+  if (document.getElementById("tourHideCheck").checked) { try { localStorage.setItem(TUTORIAL_HIDE_KEY, "1"); } catch (e) {} }
+  document.getElementById("tourPromptModal").classList.remove("show");
+});
 
 function initDraft() {
   let saved = null;
@@ -812,6 +1022,7 @@ function initDraft() {
     applyDateDefaults();
     loadDraftIntoForm();
     fetchNextVol();
+    maybeShowTourPrompt();   // 新規ユーザーにだけ初回確認ダイアログを出す
   }
 }
 
