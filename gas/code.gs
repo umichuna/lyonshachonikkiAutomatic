@@ -21,6 +21,8 @@
  *   SHEET_ID            … 記録先スプレッドシートのID
  *   SHEET_NAME          … 記録先シート(タブ)名(未設定時は "社長日記")
  *   DISCORD_WEBHOOK_URL … エラー通知先(任意・未設定なら通知はスキップ)
+ *   NOTIFY_URL          … 新規掲載時に叩く通知GASのウェブアプリURL(任意・未設定ならスキップ)
+ *                         ※別途、通知用GASを doPost(e) 付きでウェブアプリ(アクセス:全員)として公開し、そのURLを設定
  */
 
 const DEFAULT_SHEET_ID = "1XPMwWYqNSrJLu7x8RCmX4JGaaU1UE-Ep9v-w5bxC1rs";
@@ -36,6 +38,7 @@ function getConfig_() {
     sheetId: props.getProperty("SHEET_ID") || DEFAULT_SHEET_ID,
     sheetName: props.getProperty("SHEET_NAME") || DEFAULT_SHEET_NAME,
     discordWebhookUrl: props.getProperty("DISCORD_WEBHOOK_URL"),
+    notifyUrl: props.getProperty("NOTIFY_URL"),
   };
   if (!cfg.githubToken || !cfg.githubOwner || !cfg.githubRepo) {
     throw new Error("GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO がスクリプトプロパティに設定されていません。");
@@ -57,6 +60,22 @@ function getSheet_(cfg) {
 
 function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// 新規掲載時に通知GAS(ウェブアプリ)を叩く。失敗しても本処理は止めない。
+function callNotifyGas_(cfg, info) {
+  if (!cfg.notifyUrl) return;
+  try {
+    UrlFetchApp.fetch(cfg.notifyUrl, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(info),
+      muteHttpExceptions: true,
+      followRedirects: true,
+    });
+  } catch (e) {
+    notifyDiscord_(cfg, `⚠️ Vol.${info.vol} の公開通知(NOTIFY_URL)呼び出しに失敗しました: ${e.message}`);
+  }
 }
 
 function notifyDiscord_(cfg, message) {
@@ -230,6 +249,16 @@ function doPost(e) {
     } catch (sheetErr) {
       notifyDiscord_(cfg, `⚠️ Vol.${volNo} はGitHubへの${isUpdate ? "更新" : "公開"}に成功しましたが、スプレッドシートへの記録に失敗しました。手動で確認してください。\nURL: ${publishedUrl}\nエラー: ${sheetErr.message}`);
       return jsonOut_({ success: false, error: "GitHubへの反映は完了しましたが、スプレッドシートへの記録に失敗しました。担当者へ連絡してください。" });
+    }
+
+    // ── 4. 新規掲載のときだけ、通知GAS(ウェブアプリ)を叩く(修正=上書き更新では叩かない)──
+    if (!isUpdate) {
+      callNotifyGas_(cfg, {
+        vol: volNo,
+        title: title,
+        url: publishedUrl,
+        date: Utilities.formatDate(startDate, Session.getScriptTimeZone(), "yyyy-MM-dd"),
+      });
     }
 
     return jsonOut_({ success: true, url: publishedUrl });
