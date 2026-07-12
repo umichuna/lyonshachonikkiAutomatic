@@ -97,6 +97,9 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 .history-meta { font-size: 12px; color: var(--ink-soft); margin-bottom: 8px; }
 .history-open { display: inline-block; font-size: 12px; color: var(--crust-dark); border: 1px solid var(--crust); border-radius: 16px; padding: 4px 14px; text-decoration: none; }
 .history-open:hover { background: var(--crust); color: #fff; }
+.history-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.history-edit { display: inline-block; font-size: 12px; color: var(--ink-soft); border: 1px solid var(--line); border-radius: 16px; padding: 4px 14px; background: #fff; cursor: pointer; font-family: inherit; }
+.history-edit:hover { background: var(--paper); }
 
 /* ── チュートリアル(使い方ツアー) ── */
 .tour-launch { text-align: center; margin-bottom: 16px; }
@@ -808,19 +811,29 @@ document.getElementById("newArticleBtn").addEventListener("click", startNewArtic
    ════════════════════════════════════════════════ */
 document.getElementById("sheetLink").href = SPREADSHEET_URL;
 
+let historyItems = [];
+
 function renderHistory(items) {
+  historyItems = items || [];
   const box = document.getElementById("historyBox");
   if (!items || items.length === 0) {
     box.innerHTML = "<p>まだ掲載履歴がありません。</p>";
     return;
   }
-  box.innerHTML = items.map(it => {
+  box.innerHTML = items.map((it, idx) => {
     const vol = it.vol ? `<span class="history-vol">Vol.${escapeHtml(it.vol)}</span>` : "";
     const open = it.url
       ? `<a class="history-open" href="${escapeAttr(it.url)}" target="_blank" rel="noopener">記事を開く</a>` : "";
-    return `<div class="history-card"><div class="hc-top">${vol}<span class="history-title">${escapeHtml(it.title || "(無題)")}</span></div>${open}</div>`;
+    const edit = it.url
+      ? `<button type="button" class="history-edit" data-idx="${idx}">この記事を修正する</button>` : "";
+    return `<div class="history-card"><div class="hc-top">${vol}<span class="history-title">${escapeHtml(it.title || "(無題)")}</span></div><div class="history-actions">${open}${edit}</div></div>`;
   }).join("");
 }
+
+document.getElementById("historyBox").addEventListener("click", (e) => {
+  const btn = e.target.closest(".history-edit");
+  if (btn) editHistoryArticle(Number(btn.dataset.idx));
+});
 
 async function loadHistory() {
   const box = document.getElementById("historyBox");
@@ -835,6 +848,124 @@ async function loadHistory() {
     renderHistory(data.items || []);
   } catch (e) {
     box.innerHTML = "<p>履歴の取得に失敗しました。</p>";
+  }
+}
+
+/* ── 過去記事を履歴から修正モードで読み込む ── */
+function inlineNodesToMarkup(container) {
+  let out = "";
+  container.childNodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      out += node.textContent;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.tagName === "BR") {
+        out += "\n";
+      } else if (node.tagName === "SPAN") {
+        const cls = node.className || "";
+        const inner = node.textContent;
+        if (cls.includes("t-bold")) out += "**" + inner + "**";
+        else if (cls.includes("t-under")) out += "__" + inner + "__";
+        else if (cls.includes("t-mark")) out += "==" + inner + "==";
+        else out += inner;
+      } else {
+        out += node.textContent;
+      }
+    }
+  });
+  return out;
+}
+
+function parseSectionBodyToText(bodyEl) {
+  const parts = [];
+  bodyEl.querySelectorAll(":scope > p, :scope > div.quote-block").forEach(el => {
+    if (el.classList.contains("quote-block")) {
+      const mainEl = el.querySelector(".quote-main");
+      const subEl = el.querySelector(".quote-sub");
+      const mainText = (mainEl ? inlineNodesToMarkup(mainEl) : "").replace(/\n/g, " ").trim();
+      let line = ">> " + mainText;
+      if (subEl) {
+        const subText = subEl.textContent.replace(/^—+/, "").replace(/—+$/, "").trim();
+        if (subText) line += "|" + subText;
+      }
+      parts.push(line);
+    } else {
+      parts.push(inlineNodesToMarkup(el).trim());
+    }
+  });
+  return parts.join("\n\n");
+}
+
+function parseArticleForEdit(htmlText) {
+  const doc = new DOMParser().parseFromString(htmlText, "text/html");
+  const title = (doc.querySelector(".article-main-title")?.textContent || "").trim();
+  let subtitleEn = "";
+  const subEl = doc.querySelector(".article-subtitle");
+  if (subEl) {
+    subtitleEn = subEl.textContent.trim().replace(/^—\s*/, "").replace(/\s*—$/, "");
+  }
+  const blocks = [];
+  doc.querySelectorAll(".section").forEach(sectionEl => {
+    const headingEl = sectionEl.querySelector(".section-heading");
+    let heading = "";
+    if (headingEl) {
+      const clone = headingEl.cloneNode(true);
+      const iconEl = clone.querySelector(".section-icon");
+      if (iconEl) iconEl.remove();
+      heading = clone.textContent.trim();
+    }
+    const bodyEl = sectionEl.querySelector(".section-body");
+    const body = bodyEl ? parseSectionBodyToText(bodyEl) : "";
+    const photos = [];
+    (bodyEl ? bodyEl.querySelectorAll(".photo-block") : []).forEach(fig => {
+      const img = fig.querySelector("img");
+      const captionEl = fig.querySelector("figcaption");
+      if (img) {
+        photos.push({
+          id: "ph" + Date.now() + Math.random().toString(36).slice(2, 6),
+          dataUrl: img.getAttribute("src") || "",
+          caption: captionEl ? captionEl.textContent.replace(/^▲\s*/, "").trim() : "",
+        });
+      }
+    });
+    blocks.push({ id: "blk" + Date.now() + Math.random().toString(36).slice(2, 6), heading, body, photos });
+  });
+  if (blocks.length === 0) blocks.push(makeBlock());
+  return { title, subtitleEn, blocks };
+}
+
+async function editHistoryArticle(idx) {
+  const it = historyItems[idx];
+  if (!it || !it.url) return;
+  if (!confirm(`Vol.${it.vol || ""}「${it.title || ""}」を修正用に読み込みます。現在入力中の内容は上書きされます。よろしいですか?`)) return;
+  try {
+    const res = await fetch(it.url);
+    if (!res.ok) throw new Error("記事の取得に失敗しました");
+    const htmlText = await res.text();
+    const parsed = parseArticleForEdit(htmlText);
+
+    state = {
+      volNo: it.vol || "",
+      title: parsed.title,
+      subtitleEn: parsed.subtitleEn,
+      startDate: it.startDate ? it.startDate.replace(/\./g, "-") : "",
+      endDate: it.endDate ? it.endDate.replace(/\./g, "-") : "",
+      blocks: parsed.blocks,
+      published: false,
+      publishedUrl: it.url,
+      isUpdate: true,
+    };
+    loadDraftIntoForm();
+    setInputsDisabled(false);
+    volNoInput.disabled = true;
+    document.getElementById("publishBtn").disabled = false;
+    document.getElementById("postPublishActions").style.display = "none";
+    document.getElementById("publishedUrlBox").style.display = "none";
+    document.getElementById("publishMessage").textContent = "修正したら、もう一度「掲載する」を押すと上書き更新されます(新しい行は増えません)。";
+    saveDraft();
+    document.querySelector('.tab-btn[data-tab="input"]').click();
+    showToast(`Vol.${it.vol} を読み込みました。修正して「掲載する」を押してください`, true);
+  } catch (e) {
+    showToast("記事の読み込みに失敗しました: " + e.message, false);
   }
 }
 
