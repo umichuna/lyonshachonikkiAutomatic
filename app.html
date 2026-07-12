@@ -838,10 +838,14 @@ document.getElementById("historyBox").addEventListener("click", (e) => {
   if (btn) editHistoryArticle(Number(btn.dataset.idx));
 });
 
+let historyLoaded = false; // 履歴の非同期読み込みが完了したか(チュートリアルのリング表示待ちに使う)
+
 async function loadHistory() {
+  historyLoaded = false;
   const box = document.getElementById("historyBox");
   if (!GAS_URL) {
     box.innerHTML = '<p style="font-size:13px;color:var(--ink-soft);">GASのURLが未設定のため履歴を取得できません。docs/SETUP.md を参照してください。</p>';
+    historyLoaded = true;
     return;
   }
   box.textContent = "読み込み中...";
@@ -851,6 +855,8 @@ async function loadHistory() {
     renderHistory(data.items || []);
   } catch (e) {
     box.innerHTML = "<p>履歴の取得に失敗しました。</p>";
+  } finally {
+    historyLoaded = true;
   }
 }
 
@@ -1043,9 +1049,11 @@ const TUTORIAL_STEPS = [
   { tab: "input", selector: "#helpBtn", title: "入力方法の早見表", text: "文字のかざり方を忘れたら、いつでもここで見られます。" },
   { tab: "preview", selector: "#previewFrame", title: "仕上がりを確認", text: "②プレビュー・掲載を押すと、この画面になります。<br>公開される見た目をそのまま確認できます。" },
   { tab: "preview", selector: "#publishBtn", title: "掲載する(公開)", text: "よければ「掲載する」を押すと公開されます。<br>押すと「スタッフ全員に通知されます。よろしいですか?」と出ます。よければ「OK」を押してください。<br><b>※今は押さないでください。</b>" },
-  { tab: "preview", selector: "#postPublishActions", demoTarget: "#postPublishActions", title: "掲載したあとに直したいとき", text: "掲載した直後なら、下に出る「この記事を修正する」でそのまま直せます(号数はそのまま)。<br>後日直したいときは、③掲載履歴から目的の記事の「この記事を修正する」を押してください。<br>直して「掲載する」を押すと上書きされます。このとき、スタッフへの通知は飛びません。<br>別の記事を新しく作るときは「新しい記事を作る」を押します。" },
+  { tab: "preview", selector: "#editArticleBtn", demoTarget: "#postPublishActions", title: "掲載直後に直したいとき", text: "掲載した直後なら、下に出る「この記事を修正する」でそのまま直せます(号数はそのまま)。" },
+  { tab: "history", selector: ".history-edit", waitFor: () => historyLoaded, title: "後日、直したいとき", text: "後日直したいときは、③掲載履歴から目的の記事の「この記事を修正する」を押してください。" },
+  { tab: "preview", selector: "#newArticleBtn", demoTarget: "#postPublishActions", title: "上書き・新しい記事", text: "直して「掲載する」を押すと上書きされます。このとき、スタッフへの通知は飛びません。<br>別の記事を新しく作るときは「新しい記事を作る」を押します。" },
   { tab: "preview", selector: null, title: "メッセージが出たときは", text: "「見出し/本文が空です」→ その欄に文字を入れて、もう一度「掲載する」。<br>「写真は4枚まで/1見出しに2枚まで」→ 写真を減らすか、城野さんに連絡。<br>「写真が1枚もありません…」→ 写真がなければ「はい」。入れ忘れなら「いいえ」を押して、①の画面で写真を追加。" },
-  { tab: "history", selector: "#historyBox", title: "掲載履歴", text: "③掲載履歴を押すと、これまでに掲載した記事の一覧が見られます。<br>ここから記事を開いたり、記録の表を見たりできます。<br>「この記事を修正する」を押せば、後日でも別の端末からでも、その記事を直せます。" },
+  { tab: "history", selector: "#historyBox", waitFor: () => historyLoaded, title: "掲載履歴", text: "③掲載履歴を押すと、これまでに掲載した記事の一覧が見られます。<br>ここから記事を開いたり、記録の表を見たりできます。" },
   { tab: "input", selector: null, title: "これで準備OK", text: "おつかれさまでした。<br>もう一度見たいときは、上の「❓ 使い方」からいつでも見られます。<br>わからないことは、城野さん または LINE でご連絡ください。" },
 ];
 
@@ -1093,7 +1101,12 @@ function showTourStep(i) {
   document.getElementById("tourText").innerHTML = step.text;
   document.getElementById("tourPrev").style.visibility = (i === 0) ? "hidden" : "visible";
   document.getElementById("tourNext").textContent = (i === TUTORIAL_STEPS.length - 1) ? "おわり" : "つぎへ →";
-  setTimeout(() => {
+  const applyTarget = (attemptsLeft) => {
+    // 履歴の非同期読み込みなど、対象がまだ用意できていなければ少し待って再試行する
+    if (step.waitFor && !step.waitFor() && attemptsLeft > 0) {
+      setTimeout(() => applyTarget(attemptsLeft - 1), 200);
+      return;
+    }
     // 掲載後にしか出ないボタン等を、説明のためツアー中だけ一時的に表示する
     if (step.demoTarget && !state.published) {
       const demoEl = document.querySelector(step.demoTarget);
@@ -1106,7 +1119,8 @@ function showTourStep(i) {
     } else {
       document.getElementById("tourRing").style.display = "none";
     }
-  }, 80);
+  };
+  setTimeout(() => applyTarget(15), 80); // 履歴の読み込み完了を最大3秒ほど待つ
 }
 
 // 対象を「下部カードより上の領域」の中央へスクロール(カードの裏に隠れないように)
