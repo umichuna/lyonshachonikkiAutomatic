@@ -111,6 +111,39 @@ function volFromUrl_(url) {
   return m ? m[1] : "";
 }
 
+// GitHubに問い合わせて、オーナー名・リポジトリ名の「正式な綴り(大文字小文字)」を取得する。
+// GitHub Pages は公開URLのリポジトリ名部分の大文字小文字を区別するため、
+// スクリプトプロパティ GITHUB_REPO の綴りがずれていてもここで正しい綴りに補正する。
+// 取得結果は 6 時間キャッシュし、毎回のAPI呼び出しを避ける。取得失敗時は設定値のまま。
+function getCanonicalNames_(cfg) {
+  const fallback = { owner: cfg.githubOwner, repo: cfg.githubRepo };
+  const cache = CacheService.getScriptCache();
+  const cacheKey = "canon:" + cfg.githubOwner + "/" + cfg.githubRepo;
+  const cached = cache.get(cacheKey);
+  if (cached) { try { return JSON.parse(cached); } catch (e) { /* 壊れていたら取り直す */ } }
+  try {
+    const res = UrlFetchApp.fetch(`https://api.github.com/repos/${cfg.githubOwner}/${cfg.githubRepo}`, {
+      headers: { Authorization: `Bearer ${cfg.githubToken}`, Accept: "application/vnd.github+json" },
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() === 200) {
+      const j = JSON.parse(res.getContentText());
+      const result = {
+        owner: (j.owner && j.owner.login) || cfg.githubOwner,
+        repo: j.name || cfg.githubRepo,
+      };
+      cache.put(cacheKey, JSON.stringify(result), 21600); // 6時間
+      return result;
+    }
+  } catch (e) { /* 通信失敗時はフォールバック */ }
+  return fallback;
+}
+
+// 公開URL(…/<repo>/volXXX.html)のリポジトリ名部分を、正式な綴りに置き換える。
+function fixRepoCase_(url, canonicalRepo) {
+  return String(url || "").replace(/(\.github\.io\/)[^/]+(\/)/i, `$1${canonicalRepo}$2`);
+}
+
 /* ════════════════════════════════════════════════
    GET: ?action=next_vol / ?action=history
    ════════════════════════════════════════════════ */
@@ -133,6 +166,7 @@ function doGet(e) {
     }
 
     if (action === "history") {
+      const canon = getCanonicalNames_(cfg);
       const items = [];
       if (lastRow >= 2) {
         const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
@@ -145,7 +179,7 @@ function doGet(e) {
             title: title,
             startDate: formatCellDate_(row[0]),
             endDate: formatCellDate_(row[1]),
-            url: url,
+            url: fixRepoCase_(url, canon.repo), // 古い行の綴りずれもここで補正して返す
           });
         });
       }
@@ -222,7 +256,10 @@ function doPost(e) {
       throw new Error(`GitHubへのデプロイに失敗しました(${commitRes.getResponseCode()}): ${commitRes.getContentText()}`);
     }
 
-    const publishedUrl = `https://${cfg.githubOwner}.github.io/${cfg.githubRepo}/${fileName}`;
+    // 公開URLは設定値の綴りに依存せず、GitHubが返す正式名称(大文字小文字が正)で組み立てる。
+    // これで GITHUB_REPO の綴りがずれていても、公開URL・シート記録・通知はすべて正しいURLになる。
+    const canon = getCanonicalNames_(cfg);
+    const publishedUrl = `https://${canon.owner}.github.io/${canon.repo}/${fileName}`;
 
     // ── 3. スプレッドシート ──
     //  更新: URL(D列)一致の既存行を探し A/B/C のみ上書き(D=URL・E=処理 は触らない
@@ -233,7 +270,8 @@ function doPost(e) {
       if (isUpdate) {
         const values = sheet.getDataRange().getValues();
         for (let i = 1; i < values.length; i++) {
-          if (String(values[i][3]) === publishedUrl) {
+          // 既存行が古い綴り(小文字等)でも修正が拾えるよう、大文字小文字を無視して照合する
+          if (String(values[i][3]).toLowerCase() === publishedUrl.toLowerCase()) {
             const row = i + 1;
             sheet.getRange(row, 1).setValue(startDate); // A 更新日/開始日
             sheet.getRange(row, 2).setValue(endDate);   // B 掲載終了日
