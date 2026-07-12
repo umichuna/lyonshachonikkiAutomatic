@@ -221,7 +221,9 @@ function doPost(e) {
     const sheet = getSheet_(cfg);
 
     const fileName = `vol${volNo}.html`;
-    const apiBase = `https://api.github.com/repos/${cfg.githubOwner}/${cfg.githubRepo}/contents/${fileName}`;
+    const folderPath = `past-articles`;
+    const filePath = `${folderPath}/${fileName}`;
+    const apiBase = `https://api.github.com/repos/${cfg.githubOwner}/${cfg.githubRepo}/contents/${filePath}`;
     const authHeaders = {
       Authorization: `Bearer ${cfg.githubToken}`,
       Accept: "application/vnd.github+json",
@@ -259,7 +261,7 @@ function doPost(e) {
     // 公開URLは設定値の綴りに依存せず、GitHubが返す正式名称(大文字小文字が正)で組み立てる。
     // これで GITHUB_REPO の綴りがずれていても、公開URL・シート記録・通知はすべて正しいURLになる。
     const canon = getCanonicalNames_(cfg);
-    const publishedUrl = `https://${canon.owner}.github.io/${canon.repo}/${fileName}`;
+    const publishedUrl = `https://${canon.owner}.github.io/${canon.repo}/${filePath}`;
 
     // ── 3. スプレッドシート ──
     //  更新: URL(D列)一致の既存行を探し A/B/C のみ上書き(D=URL・E=処理 は触らない
