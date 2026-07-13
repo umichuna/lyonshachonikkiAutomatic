@@ -264,20 +264,24 @@ function doPost(e) {
     const publishedUrl = `https://${canon.owner}.github.io/${canon.repo}/${filePath}`;
 
     // ── 3. スプレッドシート ──
-    //  更新: URL(D列)一致の既存行を探し A/B/C のみ上書き(D=URL・E=処理 は触らない
-    //        → 処理="済" が保たれ再通知なし・行も増えない)。
+    //  更新: Vol番号一致の既存行を探し A/B/C/D を上書き(E=処理 は触らない
+    //        → 処理="済" が保たれ再通知なし・行も増えない)。D(URL)は保存先変更
+    //        (直下→past-articles/)に追随させ、古いデッドリンクを新URLへ移行する。
+    //        URL完全一致だと保存先パスが変わった際に旧行を拾えず重複行になるため、
+    //        ファイル名 volXXX.html から取れるVol番号で照合する(パス差異・大文字小文字に強い)。
     //  新規: 1行追記(E=空 → 既存通知システムが未処理として拾い、処理後に自分で「済」にする)。
     try {
       let updated = false;
       if (isUpdate) {
         const values = sheet.getDataRange().getValues();
         for (let i = 1; i < values.length; i++) {
-          // 既存行が古い綴り(小文字等)でも修正が拾えるよう、大文字小文字を無視して照合する
-          if (String(values[i][3]).toLowerCase() === publishedUrl.toLowerCase()) {
+          const rowVol = volFromUrl_(values[i][3]);
+          if (rowVol && rowVol.padStart(3, "0") === volNo.padStart(3, "0")) {
             const row = i + 1;
-            sheet.getRange(row, 1).setValue(startDate); // A 更新日/開始日
-            sheet.getRange(row, 2).setValue(endDate);   // B 掲載終了日
-            sheet.getRange(row, 3).setValue(title);     // C タイトル
+            sheet.getRange(row, 1).setValue(startDate);    // A 更新日/開始日
+            sheet.getRange(row, 2).setValue(endDate);      // B 掲載終了日
+            sheet.getRange(row, 3).setValue(title);        // C タイトル
+            sheet.getRange(row, 4).setValue(publishedUrl); // D URL(保存先変更に追随)
             updated = true;
             break;
           }

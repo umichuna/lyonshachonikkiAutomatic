@@ -290,6 +290,7 @@ let state = {
 };
 let templateCache = null;
 let saveTimer = null;
+let saveQuotaWarned = false;   // 容量超過の自動保存失敗を一度だけ通知するためのフラグ
 let activeTextarea = null;
 
 /* ════════════════════════════════════════════════
@@ -551,7 +552,8 @@ function renderParagraph(text) {
     const sub = parts[1] ? `<span class="quote-sub">——${convertInline(parts[1].trim())}——</span>` : "";
     return `<div class="quote-block"><span class="quote-main">${main}</span>${sub}</div>`;
   }
-  return `<p>${convertInline(text.trim())}</p>`;
+  // 段落内の単一改行(Enter1回)は <br> で残す。空行(Enter2回)は上位で段落分割済み。
+  return `<p>${convertInline(text.trim()).replace(/\n/g, "<br>")}</p>`;
 }
 
 function renderArticleBlockHtml(blk, num) {
@@ -1002,7 +1004,16 @@ function scheduleAutosave() {
   saveTimer = setTimeout(saveDraft, 800);
 }
 function saveDraft() {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state)); } catch (e) { /* 容量超過等は無視 */ }
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
+  } catch (e) {
+    // 写真が多いと dataURL でlocalStorageが溢れる。黙って失敗すると古い下書きに巻き戻り
+    // 気づけないため、一度だけ通知する(掲載自体は下書きに依存しないので続行可能)。
+    if (!saveQuotaWarned) {
+      saveQuotaWarned = true;
+      showToast("写真が多いため自動保存できませんでした。このまま掲載はできます。", false);
+    }
+  }
 }
 function applyDateDefaults() {
   if (!state.startDate) state.startDate = todayISO();
@@ -1189,8 +1200,10 @@ document.getElementById("tourPromptNo").addEventListener("click", () => {
 function initDraft() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); } catch (e) { saved = null; }
-  if (saved && saved.published) {
-    // 掲載済みの記事は「続きから再開」の対象にしない(③掲載履歴からいつでも修正できるため)
+  if (saved && (saved.published || saved.isUpdate)) {
+    // 掲載済み記事(published)や、掲載後の修正中(isUpdate)は「続きから再開」の対象にしない。
+    // ③掲載履歴からいつでも修正できるため。中断した修正セッションを新規のつもりで復元して
+    // しまうと、通知なしで元記事を上書き(=消す)危険があるため、必ず履歴経由に統一する。
     try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
     saved = null;
   }
