@@ -34,6 +34,8 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 .help-btn { display: inline-block; font-size: 12px; padding: 6px 14px; border: 1px solid var(--crust); color: var(--crust-dark); background: #fff; border-radius: 20px; cursor: pointer; margin-bottom: 14px; }
 .line-note { font-size: 12px; color: var(--ink-soft); background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; margin-top: 24px; }
 .section-label { font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 24px 0 10px; }
+.series-box { border: 1px dashed var(--line); border-radius: 8px; padding: 14px 14px 2px; margin-bottom: 20px; background: var(--paper); }
+.series-box-label { font-size: 12px; font-weight: 700; color: var(--crust-dark); margin-bottom: 12px; line-height: 1.5; }
 
 /* ── モーダル ── */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(58,42,30,0.45); display: none; align-items: center; justify-content: center; z-index: 300; padding: 20px; }
@@ -163,6 +165,17 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
       <label>サブタイトル(任意)</label>
       <input type="text" id="subtitleInput" placeholder="日本語でも英語でもOK(空欄可)">
     </div>
+    <div class="series-box">
+      <div class="series-box-label">シリーズもの(任意) — 連載のときだけ入れてください。ふだんは空でOK</div>
+      <div class="field">
+        <label>シリーズ見出し(記事の上に出ます)</label>
+        <input type="text" id="seriesInput" placeholder="例:ルーツ編・その四(✦は自動で付きます)">
+      </div>
+      <div class="field">
+        <label>章末メッセージ(記事の最後に出ます)</label>
+        <input type="text" id="seriesEndInput" placeholder="例:ルーツ編　続く(——は自動で付きます)">
+      </div>
+    </div>
     <div class="row">
       <div class="field">
         <label>掲載開始日</label>
@@ -285,6 +298,8 @@ let state = {
   volNo: "",
   title: "",
   subtitleEn: "",
+  series: "",      // シリーズ見出し(キッカー)。空なら非表示。表示時は ✦ ... ✦
+  seriesEnd: "",   // 章末メッセージ。空なら非表示。表示時は —— ... ——
   startDate: "",   // ISO YYYY-MM-DD(掲載開始日 = シートA列「更新日」)
   endDate: "",     // ISO YYYY-MM-DD(掲載終了日 = シートB列)
   blocks: [],      // [{ id, heading, body, photos: [{id, dataUrl, caption}] }]
@@ -325,7 +340,7 @@ function makeBlock() {
 }
 function findBlock(id) { return state.blocks.find(b => b.id === id); }
 function setInputsDisabled(disabled) {
-  ["volNoInput", "titleInput", "subtitleInput", "startDateInput", "endDateInput"].forEach(id => {
+  ["volNoInput", "titleInput", "subtitleInput", "seriesInput", "seriesEndInput", "startDateInput", "endDateInput"].forEach(id => {
     document.getElementById(id).disabled = disabled;
   });
   document.querySelectorAll("#blocksContainer input, #blocksContainer textarea, #blocksContainer button").forEach(el => el.disabled = disabled);
@@ -352,6 +367,8 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
 const volNoInput = document.getElementById("volNoInput");
 const titleInput = document.getElementById("titleInput");
 const subtitleInput = document.getElementById("subtitleInput");
+const seriesInput = document.getElementById("seriesInput");
+const seriesEndInput = document.getElementById("seriesEndInput");
 const startDateInput = document.getElementById("startDateInput");
 const endDateInput = document.getElementById("endDateInput");
 
@@ -359,10 +376,12 @@ function syncStateFromForm() {
   state.volNo = volNoInput.value.trim();
   state.title = titleInput.value;
   state.subtitleEn = subtitleInput.value;
+  state.series = seriesInput.value;
+  state.seriesEnd = seriesEndInput.value;
   state.startDate = startDateInput.value;
   state.endDate = endDateInput.value;
 }
-[volNoInput, titleInput, subtitleInput, startDateInput, endDateInput].forEach(el => {
+[volNoInput, titleInput, subtitleInput, seriesInput, seriesEndInput, startDateInput, endDateInput].forEach(el => {
   el.addEventListener("input", () => { syncStateFromForm(); scheduleAutosave(); });
 });
 
@@ -588,15 +607,23 @@ function generateArticleHtml(templateStr) {
   const subtitleBlock = sub
     ? `<div class="article-subtitle${isJpSub ? " jp" : ""}">— ${escapeHtml(sub)} —</div>` : "";
 
+  // シリーズもの(任意): 入力があるときだけ ✦ 見出し / —— 章末 を出す
+  const series = (state.series || "").trim();
+  const kickerBlock = series
+    ? `<span class="article-kicker">✦ ${escapeHtml(series)} ✦</span>` : "";
+  const seriesEnd = (state.seriesEnd || "").trim();
+  const chapterEnd = seriesEnd
+    ? `<div class="chapter-end">—— ${escapeHtml(seriesEnd)} ——</div>` : "";
+
   let html = templateStr;
   html = html.split("{{vol_number}}").join(volPadded);
   html = html.split("{{date}}").join(dotsFromISO(state.startDate));
-  html = html.split("{{kicker_block}}").join("");
+  html = html.split("{{kicker_block}}").join(kickerBlock);
   html = html.split("{{main_title}}").join(escapeHtml(state.title || ""));
   html = html.split("{{subtitle_block}}").join(subtitleBlock);
   html = html.split("{{vol_id}}").join(volId);
   html = html.split("{{body}}").join(bodyHtml);
-  html = html.split("{{chapter_end}}").join("");
+  html = html.split("{{chapter_end}}").join(chapterEnd);
   return html;
 }
 
@@ -796,7 +823,7 @@ function enterEditMode() {
 function startNewArticle() {
   try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
   state = {
-    volNo: "", title: "", subtitleEn: "", startDate: "", endDate: "",
+    volNo: "", title: "", subtitleEn: "", series: "", seriesEnd: "", startDate: "", endDate: "",
     blocks: [makeBlock()], published: false, publishedUrl: "", isUpdate: false,
   };
   applyDateDefaults();
@@ -945,6 +972,13 @@ function parseArticleForEdit(htmlText) {
   if (subEl) {
     subtitleEn = subEl.textContent.trim().replace(/^—\s*/, "").replace(/\s*—$/, "");
   }
+  // シリーズもの: ✦ や —— の飾りを外して中身の文字だけ復元する
+  let series = "";
+  const kickerEl = doc.querySelector(".article-kicker");
+  if (kickerEl) series = kickerEl.textContent.trim().replace(/^[✦◆✧\s]+/, "").replace(/[✦◆✧\s]+$/, "");
+  let seriesEnd = "";
+  const endEl = doc.querySelector(".chapter-end");
+  if (endEl) seriesEnd = endEl.textContent.trim().replace(/^[—\-–\s]+/, "").replace(/[—\-–\s]+$/, "");
   const blocks = [];
   doc.querySelectorAll(".section").forEach(sectionEl => {
     const headingEl = sectionEl.querySelector(".section-heading");
@@ -972,7 +1006,7 @@ function parseArticleForEdit(htmlText) {
     blocks.push({ id: "blk" + Date.now() + Math.random().toString(36).slice(2, 6), heading, body, photos });
   });
   if (blocks.length === 0) blocks.push(makeBlock());
-  return { title, subtitleEn, blocks };
+  return { title, subtitleEn, series, seriesEnd, blocks };
 }
 
 async function editHistoryArticle(idx) {
@@ -989,6 +1023,8 @@ async function editHistoryArticle(idx) {
       volNo: it.vol || "",
       title: parsed.title,
       subtitleEn: parsed.subtitleEn,
+      series: parsed.series || "",
+      seriesEnd: parsed.seriesEnd || "",
       startDate: it.startDate ? it.startDate.replace(/\./g, "-") : "",
       endDate: it.endDate ? it.endDate.replace(/\./g, "-") : "",
       blocks: parsed.blocks,
@@ -1055,6 +1091,8 @@ function loadDraftIntoForm() {
   volNoInput.value = state.volNo || "";
   titleInput.value = state.title || "";
   subtitleInput.value = state.subtitleEn || "";
+  seriesInput.value = state.series || "";
+  seriesEndInput.value = state.seriesEnd || "";
   startDateInput.value = state.startDate || "";
   endDateInput.value = state.endDate || "";
   if (!state.blocks || state.blocks.length === 0) state.blocks = [makeBlock()];
@@ -1082,6 +1120,7 @@ const TUTORIAL_STEPS = [
   { tab: "input", selector: "#volNoInput", title: "Vol(号数)", text: "記事の番号です。ふだんは自動で入ります。直したいときは、ここを押して書き直せます。" },
   { tab: "input", selector: "#titleInput", title: "タイトル", text: "記事の題名を入れます。<br>例:「新しい門出」" },
   { tab: "input", selector: "#subtitleInput", title: "サブタイトル", text: "小さな副題です。入れても、入れなくても大丈夫です。" },
+  { tab: "input", selector: ".series-box", title: "シリーズもの(連載)のとき", text: "「ルーツ編」のように何回かに分けて続く記事のときだけ使います。<br>上の欄に見出し(例:ルーツ編・その四)、下の欄に最後のことば(例:ルーツ編　続く)を入れると、記事の上と下にきれいに飾って出ます。<br>ふだんの記事では空のままでOKです。" },
   { tab: "input", selector: "#startDateInput", title: "掲載する期間", text: "「開始日」は今日、「終了日」は10年後が、はじめから入っています。<br>とくに変えなくて大丈夫です。" },
   { tab: "input", selector: ".block-heading-input", title: "見出し", text: "記事の小見出しを入れます。<br>例:「おはよう」" },
   { tab: "input", selector: ".block-body-input", title: "本文", text: "ここに日記の文章を書きます。" },
