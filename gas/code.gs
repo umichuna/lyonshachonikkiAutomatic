@@ -27,7 +27,7 @@
 
 const DEFAULT_SHEET_ID = "1XPMwWYqNSrJLu7x8RCmX4JGaaU1UE-Ep9v-w5bxC1rs";
 const DEFAULT_SHEET_NAME = "社長日記";
-const HEADER_ROW = ["更新日", "掲載終了日", "タイトル", "URL", "処理"];
+const HEADER_ROW = ["更新日", "掲載終了日", "タイトル", "URL", "処理", "取り消し"];
 
 function getConfig_() {
   const props = PropertiesService.getScriptProperties();
@@ -144,6 +144,27 @@ function fixRepoCase_(url, canonicalRepo) {
   return String(url || "").replace(/(\.github\.io\/)[^/]+(\/)/i, `$1${canonicalRepo}$2`);
 }
 
+// 記事を取り消す(取り下げる): 掲載終了日(B)を今日にし、F列に「取り消し」印を付ける。
+// Vol番号で該当行を照合(保存先パスや綴りに依存しない)。GitHubファイル・E列は触らない。
+function cancelArticle_(cfg, volNo) {
+  if (!volNo) return jsonOut_({ success: false, error: "volNo は必須です。" });
+  const sheet = getSheet_(cfg);
+  const values = sheet.getDataRange().getValues();
+  // F1(ヘッダー)が空なら「取り消し」ラベルを付け、一覧を分かりやすくする。
+  if (!String((values[0] || [])[5] || "").trim()) sheet.getRange(1, 6).setValue("取り消し");
+  const today = new Date();
+  for (let i = 1; i < values.length; i++) {
+    const rowVol = volFromUrl_(values[i][3]);
+    if (rowVol && rowVol.padStart(3, "0") === volNo.padStart(3, "0")) {
+      const row = i + 1;
+      sheet.getRange(row, 2).setValue(today);        // B 掲載終了日=今日(取り下げ)
+      sheet.getRange(row, 6).setValue("取り消し");    // F 取り消し印
+      return jsonOut_({ success: true });
+    }
+  }
+  return jsonOut_({ success: false, error: `Vol.${volNo} が掲載履歴に見つかりませんでした。` });
+}
+
 /* ════════════════════════════════════════════════
    GET: ?action=next_vol / ?action=history
    ════════════════════════════════════════════════ */
@@ -169,7 +190,7 @@ function doGet(e) {
       const canon = getCanonicalNames_(cfg);
       const items = [];
       if (lastRow >= 2) {
-        const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+        const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues(); // A〜F(Fは取り消し印)
         rows.forEach(row => {
           const title = String(row[2] || "");
           const url = String(row[3] || "");
@@ -180,6 +201,7 @@ function doGet(e) {
             startDate: formatCellDate_(row[0]),
             endDate: formatCellDate_(row[1]),
             url: fixRepoCase_(url, canon.repo), // 古い行の綴りずれもここで補正して返す
+            canceled: String(row[5] || "").trim() === "取り消し", // F列
           });
         });
       }
@@ -207,6 +229,14 @@ function doPost(e) {
 
   try {
     const payload = JSON.parse(e.postData.contents);
+
+    // ── 記事の取り消し(取り下げ)──
+    //  掲載終了日(B)を今日にして表示から外し、F列に「取り消し」印を付ける。
+    //  GitHubのファイル・Vol番号・E列(処理)は残す(採番はずれない・再通知しない)。
+    if (payload.action === "cancel") {
+      return cancelArticle_(cfg, String(payload.volNo || "").trim());
+    }
+
     const volNo = String(payload.volNo || "").trim();
     const title = String(payload.title || "").trim();
     const startDate = isoToDate_(payload.startDate);
@@ -282,6 +312,7 @@ function doPost(e) {
             sheet.getRange(row, 2).setValue(endDate);      // B 掲載終了日
             sheet.getRange(row, 3).setValue(title);        // C タイトル
             sheet.getRange(row, 4).setValue(publishedUrl); // D URL(保存先変更に追随)
+            sheet.getRange(row, 6).setValue("");           // F 再掲載したら「取り消し」印を解除
             updated = true;
             break;
           }

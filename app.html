@@ -100,6 +100,10 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 .history-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .history-edit { display: inline-block; font-size: 12px; color: var(--ink-soft); border: 1px solid var(--line); border-radius: 16px; padding: 4px 14px; background: #fff; cursor: pointer; font-family: inherit; }
 .history-edit:hover { background: var(--paper); }
+.history-cancel { display: inline-block; font-size: 12px; color: #b0413e; border: 1px solid #e0a6a4; border-radius: 16px; padding: 4px 14px; background: #fff; cursor: pointer; font-family: inherit; }
+.history-cancel:hover { background: #b0413e; color: #fff; }
+.history-canceled { background: #b0413e; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 12px; flex-shrink: 0; }
+.history-card.is-canceled { opacity: 0.62; background: var(--paper); }
 
 /* ── チュートリアル(使い方ツアー) ── */
 .tour-launch { text-align: center; margin-bottom: 16px; }
@@ -826,19 +830,46 @@ function renderHistory(items) {
     return;
   }
   box.innerHTML = items.map((it, idx) => {
+    const canceled = !!it.canceled;
     const vol = it.vol ? `<span class="history-vol">Vol.${escapeHtml(it.vol)}</span>` : "";
+    const badge = canceled ? `<span class="history-canceled">取り消し済み</span>` : "";
     const open = it.url
       ? `<a class="history-open" href="${escapeAttr(it.url)}" target="_blank" rel="noopener">記事を開く</a>` : "";
     const edit = it.url
       ? `<button type="button" class="history-edit" data-idx="${idx}">この記事を修正する</button>` : "";
-    return `<div class="history-card"><div class="hc-top">${vol}<span class="history-title">${escapeHtml(it.title || "(無題)")}</span></div><div class="history-actions">${open}${edit}</div></div>`;
+    // 取り消しは未取り消しの記事だけに出す(取り消し済みは修正で再掲載すれば復活できる)
+    const cancel = (it.url && !canceled)
+      ? `<button type="button" class="history-cancel" data-idx="${idx}">取り消し</button>` : "";
+    return `<div class="history-card${canceled ? " is-canceled" : ""}"><div class="hc-top">${vol}${badge}<span class="history-title">${escapeHtml(it.title || "(無題)")}</span></div><div class="history-actions">${open}${edit}${cancel}</div></div>`;
   }).join("");
 }
 
 document.getElementById("historyBox").addEventListener("click", (e) => {
-  const btn = e.target.closest(".history-edit");
-  if (btn) editHistoryArticle(Number(btn.dataset.idx));
+  const editBtn = e.target.closest(".history-edit");
+  if (editBtn) { editHistoryArticle(Number(editBtn.dataset.idx)); return; }
+  const cancelBtn = e.target.closest(".history-cancel");
+  if (cancelBtn) { cancelHistoryArticle(Number(cancelBtn.dataset.idx)); return; }
 });
+
+async function cancelHistoryArticle(idx) {
+  const it = historyItems[idx];
+  if (!it) return;
+  if (!GAS_URL) { showToast("GASのURLが未設定です。", false); return; }
+  if (!confirm(`Vol.${it.vol || ""}「${it.title || ""}」を取り消します。\n掲載終了日を今日にして取り下げ、一覧に「取り消し」と記録します。\n(記事のファイルは残るので、あとで「この記事を修正する」から再掲載すれば元に戻せます)\nよろしいですか?`)) return;
+  try {
+    const res = await fetch(GAS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "cancel", volNo: String(it.vol || "").padStart(3, "0") }),
+    });
+    const data = await res.json();
+    if (!data.success) { showToast(data.error || "取り消しに失敗しました。", false); return; }
+    showToast("取り消しました", true);
+    loadHistory();
+  } catch (e) {
+    showToast("通信エラーが発生しました: " + e.message, false);
+  }
+}
 
 let historyLoaded = false; // 履歴の非同期読み込みが完了したか(チュートリアルのリング表示待ちに使う)
 
