@@ -576,11 +576,14 @@ function convertInline(text) {
 
 function renderParagraph(text) {
   const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-  if (lines.length && lines.every(l => l.startsWith(">> "))) {
-    const joined = lines.map(l => l.slice(3)).join("<br>");
+  // 1行目が「>> 」で始まればこの段落全体を枠(引用)にする。続きの行(>>が無くても)は同じ枠内へ。
+  if (lines.length && lines[0].startsWith(">> ")) {
+    // いったん改行で連結してから装飾変換し、最後に改行を <br> 化する
+    // (convertInline は escapeHtml するため、先に <br> を入れると文字化けする)。
+    const joined = lines.map(l => l.startsWith(">> ") ? l.slice(3) : l).join("\n");
     const parts = joined.split("|");
-    const main = convertInline(parts[0].trim());
-    const sub = parts[1] ? `<span class="quote-sub">——${convertInline(parts[1].trim())}——</span>` : "";
+    const main = convertInline(parts[0].trim()).replace(/\n/g, "<br>");
+    const sub = parts[1] ? `<span class="quote-sub">——${convertInline(parts[1].trim()).replace(/\n/g, "<br>")}——</span>` : "";
     return `<div class="quote-block"><span class="quote-main">${main}</span>${sub}</div>`;
   }
   // 段落内の単一改行(Enter1回)は <br> で残す。空行(Enter2回)は上位で段落分割済み。
