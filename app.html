@@ -544,10 +544,18 @@ function applyQuoteWrap() {
   const start = ta.selectionStart, end = ta.selectionEnd;
   const text = ta.value;
   const selected = text.substring(start, end).trim().replace(/\n+/g, " ");
-  const quoteLine = ">> " + selected;
-  ta.value = text.substring(0, start) + quoteLine + text.substring(end);
+  if (!selected) return;
+  const before = text.substring(0, start);
+  const after = text.substring(end);
+  // 枠(引用)は「独立した段落」のときだけ表示されるため、前後に本文があれば
+  // 空行(改行2つ)で区切って段落として切り出す。これで文の途中を選んでも必ず枠になる。
+  const lead = before ? "\n".repeat(Math.max(0, 2 - (before.match(/\n*$/)[0]).length)) : "";
+  const trail = after ? "\n".repeat(Math.max(0, 2 - (after.match(/^\n*/)[0]).length)) : "";
+  const quoteCore = ">> " + selected;
+  ta.value = before + lead + quoteCore + trail + after;
   ta.focus();
-  ta.setSelectionRange(start, start + quoteLine.length);
+  const caret = before.length + lead.length;
+  ta.setSelectionRange(caret, caret + quoteCore.length);
   ta.dispatchEvent(new Event("input"));
 }
 
