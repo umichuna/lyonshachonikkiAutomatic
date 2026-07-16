@@ -568,9 +568,10 @@ document.getElementById("closeHelpBtn").addEventListener("click", () => document
    ════════════════════════════════════════════════ */
 function convertInline(text) {
   let t = escapeHtml(text);
-  t = t.replace(/\*\*(.+?)\*\*/g, '<span class="t-bold">$1</span>');
-  t = t.replace(/__(.+?)__/g, '<span class="t-under">$1</span>');
-  t = t.replace(/==(.+?)==/g, '<span class="t-mark">$1</span>');
+  // [\s\S] にして改行をまたぐ選択でも装飾が効くようにする(. だと改行で切れて ** が残る)
+  t = t.replace(/\*\*([\s\S]+?)\*\*/g, '<span class="t-bold">$1</span>');
+  t = t.replace(/__([\s\S]+?)__/g, '<span class="t-under">$1</span>');
+  t = t.replace(/==([\s\S]+?)==/g, '<span class="t-mark">$1</span>');
   return t;
 }
 
