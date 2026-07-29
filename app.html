@@ -425,7 +425,7 @@ function renderBlocks() {
       const thumb = document.createElement("div");
       thumb.className = "photo-thumb";
       thumb.innerHTML = `
-        <img src="${p.dataUrl}">
+        <img src="${escapeAttr(p.dataUrl)}">
         <button class="rm-btn" data-id="${blk.id}" data-pid="${p.id}">×</button>
         <input type="text" placeholder="キャプション(任意)" value="${escapeAttr(p.caption || "")}" data-id="${blk.id}" data-pid="${p.id}">
       `;
@@ -604,7 +604,7 @@ function renderArticleBlockHtml(blk, num) {
   paragraphs.forEach(p => { html += "      " + renderParagraph(p) + "\n"; });
   (blk.photos || []).forEach(p => {
     html += '      <figure class="photo-block">\n';
-    html += `        <img src="${p.dataUrl}" alt="${escapeAttr(p.caption || "")}">\n`;
+    html += `        <img src="${escapeAttr(p.dataUrl)}" alt="${escapeAttr(p.caption || "")}">\n`;
     if (p.caption) html += `        <figcaption>▲ ${escapeHtml(p.caption)}</figcaption>\n`;
     html += '      </figure>\n';
   });
@@ -906,14 +906,19 @@ document.getElementById("historyBox").addEventListener("click", (e) => {
   const editBtn = e.target.closest(".history-edit");
   if (editBtn) { editHistoryArticle(Number(editBtn.dataset.idx)); return; }
   const cancelBtn = e.target.closest(".history-cancel");
-  if (cancelBtn) { cancelHistoryArticle(Number(cancelBtn.dataset.idx)); return; }
+  if (cancelBtn) { cancelHistoryArticle(Number(cancelBtn.dataset.idx), cancelBtn); return; }
 });
 
-async function cancelHistoryArticle(idx) {
+let canceling = false;   // 取り消し処理中フラグ(連打による多重送信を防ぐ)
+
+async function cancelHistoryArticle(idx, btn) {
   const it = historyItems[idx];
   if (!it) return;
+  if (canceling) return;
   if (!GAS_URL) { showToast("GASのURLが未設定です。", false); return; }
   if (!confirm(`Vol.${it.vol || ""}「${it.title || ""}」を取り消します。\n掲載終了日を今日にして取り下げ、一覧に「取り消し」と記録します。\n(記事のファイルは残るので、あとで「この記事を修正する」から再掲載すれば元に戻せます)\nよろしいですか?`)) return;
+  canceling = true;
+  if (btn) { btn.disabled = true; btn.textContent = "取り消し中…"; }
   try {
     const res = await fetch(GAS_URL, {
       method: "POST",
@@ -921,11 +926,18 @@ async function cancelHistoryArticle(idx) {
       body: JSON.stringify({ action: "cancel", volNo: String(it.vol || "").padStart(3, "0") }),
     });
     const data = await res.json();
-    if (!data.success) { showToast(data.error || "取り消しに失敗しました。", false); return; }
+    if (!data.success) {
+      showToast(data.error || "取り消しに失敗しました。", false);
+      if (btn) { btn.disabled = false; btn.textContent = "取り消し"; }
+      return;
+    }
     showToast("取り消しました", true);
-    loadHistory();
+    loadHistory();   // 再描画でボタンは作り直される
   } catch (e) {
     showToast("通信エラーが発生しました: " + e.message, false);
+    if (btn) { btn.disabled = false; btn.textContent = "取り消し"; }
+  } finally {
+    canceling = false;
   }
 }
 
@@ -1012,13 +1024,15 @@ function parseArticleForEdit(htmlText) {
   if (subEl) {
     subtitleEn = subEl.textContent.trim().replace(/^—\s*/, "").replace(/\s*—$/, "");
   }
-  // シリーズもの: ✦ や —— の飾りを外して中身の文字だけ復元する
+  // シリーズもの: 自動で付けた飾りだけを外す。生成側は「✦ x ✦」「—— x ——」と
+  // 1組しか付けないので、剥がす側も1組だけにする(貪欲だと利用者が自分で書いた
+  // 「✦特別編✦」「——完——」の記号まで編集のたびに削られてしまう)。
   let series = "";
   const kickerEl = doc.querySelector(".article-kicker");
-  if (kickerEl) series = kickerEl.textContent.trim().replace(/^[✦◆✧\s]+/, "").replace(/[✦◆✧\s]+$/, "");
+  if (kickerEl) series = kickerEl.textContent.trim().replace(/^✦\s*/, "").replace(/\s*✦$/, "");
   let seriesEnd = "";
   const endEl = doc.querySelector(".chapter-end");
-  if (endEl) seriesEnd = endEl.textContent.trim().replace(/^[—\-–\s]+/, "").replace(/[—\-–\s]+$/, "");
+  if (endEl) seriesEnd = endEl.textContent.trim().replace(/^——\s*/, "").replace(/\s*——$/, "");
   const blocks = [];
   doc.querySelectorAll(".section").forEach(sectionEl => {
     const headingEl = sectionEl.querySelector(".section-heading");

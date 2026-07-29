@@ -173,8 +173,9 @@ function cancelArticle_(cfg, volNo) {
    GET: ?action=next_vol / ?action=history
    ════════════════════════════════════════════════ */
 function doGet(e) {
-  const action = (e.parameter && e.parameter.action) || "";
   try {
+    // e が無い場合(エディタからの直接実行等)でも例外にせずJSONで返せるよう try 内で読む
+    const action = (e && e.parameter && e.parameter.action) || "";
     const cfg = getConfig_();
     const sheet = getSheet_(cfg);
     const lastRow = sheet.getLastRow();
