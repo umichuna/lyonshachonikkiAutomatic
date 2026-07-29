@@ -153,15 +153,19 @@ function cancelArticle_(cfg, volNo) {
   // F1(ヘッダー)が空なら「取り消し」ラベルを付け、一覧を分かりやすくする。
   if (!String((values[0] || [])[5] || "").trim()) sheet.getRange(1, 6).setValue("取り消し");
   const today = new Date();
+  // 同じVol番号の行が複数ある場合、1行目だけ処理して成功を返すと
+  // 残りの行は掲載終了日が未来のままで記事が公開され続ける。全一致行を処理する。
+  let updated = 0;
   for (let i = 1; i < values.length; i++) {
     const rowVol = volFromUrl_(values[i][3]);
     if (rowVol && rowVol.padStart(3, "0") === volNo.padStart(3, "0")) {
       const row = i + 1;
       sheet.getRange(row, 2).setValue(today);        // B 掲載終了日=今日(取り下げ)
       sheet.getRange(row, 6).setValue("取り消し");    // F 取り消し印
-      return jsonOut_({ success: true });
+      updated++;
     }
   }
+  if (updated > 0) return jsonOut_({ success: true, updatedRows: updated });
   return jsonOut_({ success: false, error: `Vol.${volNo} が掲載履歴に見つかりませんでした。` });
 }
 
@@ -247,6 +251,10 @@ function doPost(e) {
     if (!volNo || !title || !html) {
       return jsonOut_({ success: false, error: "volNo / title / html は必須です。" });
     }
+    // volNo はそのままファイルパスになるため、数字以外は受け付けない(パス外への書き込み防止)
+    if (!/^\d{1,4}$/.test(volNo)) {
+      return jsonOut_({ success: false, error: "Vol番号は数字で指定してください。" });
+    }
 
     const sheet = getSheet_(cfg);
 
@@ -317,6 +325,13 @@ function doPost(e) {
             break;
           }
         }
+      }
+      if (!updated && isUpdate) {
+        // 修正なのに対象行が無い場合に追記すると、行が増えるうえ E列(処理)が空になり
+        // シート追記を見ている通知システムが動いて「修正なのに再通知」されてしまう。
+        // 追記せずエラーを返し、担当者に判断してもらう。
+        notifyDiscord_(cfg, `⚠️ Vol.${volNo} はGitHubへの更新に成功しましたが、シートに該当行が見つからず記録を更新できませんでした。\nURL: ${publishedUrl}`);
+        return jsonOut_({ success: false, error: `更新対象の行が掲載履歴に見つかりませんでした(Vol.${volNo})。記事の公開は完了しています。シートの記録は担当者にご確認ください。` });
       }
       if (!updated) {
         sheet.appendRow([startDate, endDate, title, publishedUrl, ""]);

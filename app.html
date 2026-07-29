@@ -582,9 +582,12 @@ function renderParagraph(text) {
     // いったん改行で連結してから装飾変換し、最後に改行を <br> 化する
     // (convertInline は escapeHtml するため、先に <br> を入れると文字化けする)。
     const joined = lines.map(l => l.startsWith(">> ") ? l.slice(3) : l).join("\n");
-    const parts = joined.split("|");
-    const main = convertInline(parts[0].trim()).replace(/\n/g, "<br>");
-    const sub = parts[1] ? `<span class="quote-sub">——${convertInline(parts[1].trim()).replace(/\n/g, "<br>")}——</span>` : "";
+    // 「|」は最初の1個だけで本文とサブに分ける(split("|")だと3つ目以降が消える)
+    const bar = joined.indexOf("|");
+    const mainRaw = bar < 0 ? joined : joined.slice(0, bar);
+    const subRaw = bar < 0 ? "" : joined.slice(bar + 1);
+    const main = convertInline(mainRaw.trim()).replace(/\n/g, "<br>");
+    const sub = subRaw.trim() ? `<span class="quote-sub">——${convertInline(subRaw.trim()).replace(/\n/g, "<br>")}——</span>` : "";
     return `<div class="quote-block"><span class="quote-main">${main}</span>${sub}</div>`;
   }
   // 段落内の単一改行(Enter1回)は <br> で残す。空行(Enter2回)は上位で段落分割済み。
@@ -612,7 +615,10 @@ function renderArticleBlockHtml(blk, num) {
 function generateArticleHtml(templateStr) {
   const bodyHtml = state.blocks.map((blk, idx) => renderArticleBlockHtml(blk, idx + 1)).join("\n\n");
 
-  const volPadded = String(state.volNo || "000").padStart(3, "0");
+  // Vol番号は <title>・本文・リアクションのJS文字列に入るため、数字以外を落としてから使う
+  // (掲載前の検証でも弾いているが、プレビュー等の別経路もあるため二重に防ぐ)
+  const volSafe = String(state.volNo || "").replace(/\D/g, "") || "000";
+  const volPadded = volSafe.padStart(3, "0");
   const volId = `syacho-nikki-vol${volPadded}`;
   const sub = state.subtitleEn;
   const isJpSub = /[぀-ヿ㐀-鿿ｦ-ﾟ]/.test(sub || "");
@@ -664,7 +670,11 @@ function resizeImageFile(file) {
         if (w > 800) { h = Math.round(h * 800 / w); w = 800; }
         const canvas = document.createElement("canvas");
         canvas.width = w; canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        const ctx = canvas.getContext("2d");
+        // JPEGは透明を扱えないため、先に白で塗る(塗らないと透過PNGの透明部分が黒くなる)
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
         resolve(canvas.toDataURL("image/jpeg", 0.75));
       };
       img.onerror = reject;
@@ -701,7 +711,14 @@ async function handlePhotoUpload(blockId, e) {
     return;
   }
 
-  const dataUrl = await resizeImageFile(file);
+  // 読み込めない画像(拡張子だけjpgのHEIC・壊れたファイル等)で無反応にならないようにする
+  let dataUrl;
+  try {
+    dataUrl = await resizeImageFile(file);
+  } catch (err) {
+    errBox.textContent = "この写真は読み込めませんでした。別の写真をお試しください(iPhoneの写真は「JPEG」で保存すると入れられます)。";
+    return;
+  }
   blk.photos.push({ id: "p" + Date.now() + Math.random().toString(36).slice(2, 6), dataUrl, caption: "" });
   renderBlocks();
   scheduleAutosave();
@@ -723,7 +740,9 @@ document.getElementById("refreshPreviewBtn").addEventListener("click", refreshPr
 
 function validateBeforePublish() {
   if (!state.volNo) return { type: "error", msg: "Vol番号を入力してください。" };
-  if (!state.title) return { type: "error", msg: "タイトルを入力してください。" };
+  // 記号が混じると公開ページのリアクション機能(JS)やタイトルが壊れるため数字のみ許可
+  if (!/^\d{1,4}$/.test(String(state.volNo).trim())) return { type: "error", msg: "Vol番号は数字で入力してください(例:5)。" };
+  if (!state.title.trim()) return { type: "error", msg: "タイトルを入力してください。" };
   if (!state.startDate) return { type: "error", msg: "掲載開始日を入力してください。" };
   if (!state.endDate) return { type: "error", msg: "掲載終了日を入力してください。" };
   if (state.endDate < state.startDate) return { type: "error", msg: "掲載終了日は開始日より後にしてください。" };
@@ -924,6 +943,11 @@ async function loadHistory() {
   try {
     const res = await fetch(`${GAS_URL}?action=history`);
     const data = await res.json();
+    // success を見ないと、設定ミスや権限切れが「履歴がありません」に化けて原因に辿り着けない
+    if (!data.success) {
+      box.innerHTML = `<p style="font-size:13px;color:var(--danger,#b0413e);line-height:1.8;">履歴を取得できませんでした。<br>${escapeHtml(data.error || "原因不明のエラーです。")}<br><span style="color:var(--ink-soft);">設定を確認するか、城野さんにご連絡ください。</span></p>`;
+      return;
+    }
     renderHistory(data.items || []);
   } catch (e) {
     box.innerHTML = "<p>履歴の取得に失敗しました。</p>";
@@ -943,7 +967,8 @@ function inlineNodesToMarkup(container) {
         out += "\n";
       } else if (node.tagName === "SPAN") {
         const cls = node.className || "";
-        const inner = node.textContent;
+        // 子を再帰的に辿る(textContentだと装飾内の改行<br>と入れ子の装飾が消える)
+        const inner = inlineNodesToMarkup(node);
         if (cls.includes("t-bold")) out += "**" + inner + "**";
         else if (cls.includes("t-under")) out += "__" + inner + "__";
         else if (cls.includes("t-mark")) out += "==" + inner + "==";
@@ -962,10 +987,13 @@ function parseSectionBodyToText(bodyEl) {
     if (el.classList.contains("quote-block")) {
       const mainEl = el.querySelector(".quote-main");
       const subEl = el.querySelector(".quote-sub");
-      const mainText = (mainEl ? inlineNodesToMarkup(mainEl) : "").replace(/\n/g, " ").trim();
+      // 改行はそのまま保持する(空白に潰すと複数行の枠が往復で1行になる)。
+      // 生成側は「1行目が >> なら段落全体を枠」なので、2行目以降に >> が無くても復元できる。
+      const mainText = (mainEl ? inlineNodesToMarkup(mainEl) : "").trim();
       let line = ">> " + mainText;
       if (subEl) {
-        const subText = subEl.textContent.replace(/^—+/, "").replace(/—+$/, "").trim();
+        // サブも再帰で取る(textContentだと装飾が落ちる)。飾りは生成側と対称に1組だけ外す。
+        const subText = inlineNodesToMarkup(subEl).replace(/^——\s*/, "").replace(/\s*——$/, "").trim();
         if (subText) line += "|" + subText;
       }
       parts.push(line);
@@ -1031,14 +1059,24 @@ async function editHistoryArticle(idx) {
     const htmlText = await res.text();
     const parsed = parseArticleForEdit(htmlText);
 
+    // シートの日付が想定外の形式(手入力のテキスト等)なら空にして既定値へ落とす。
+    // 不正値のまま持つと日付欄は空表示なのにstateには残り、掲載日が今日で上書きされる。
+    const isoOrEmpty = (dots) => {
+      const v = dots ? String(dots).replace(/\./g, "-") : "";
+      return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
+    };
+    // 取り消し済みの記事は掲載終了日が「取り消した日」になっている。そのまま再掲載すると
+    // 復活したように見えて実際は表示されないため、既定(10年後)に戻す。
+    const restoredEnd = it.canceled ? plusYearsISO(END_DATE_YEARS) : isoOrEmpty(it.endDate);
+
     state = {
       volNo: it.vol || "",
       title: parsed.title,
       subtitleEn: parsed.subtitleEn,
       series: parsed.series || "",
       seriesEnd: parsed.seriesEnd || "",
-      startDate: it.startDate ? it.startDate.replace(/\./g, "-") : "",
-      endDate: it.endDate ? it.endDate.replace(/\./g, "-") : "",
+      startDate: isoOrEmpty(it.startDate),
+      endDate: restoredEnd,
       blocks: parsed.blocks,
       published: false,
       publishedUrl: it.url,
@@ -1050,10 +1088,14 @@ async function editHistoryArticle(idx) {
     document.getElementById("publishBtn").disabled = false;
     document.getElementById("postPublishActions").style.display = "none";
     document.getElementById("publishedUrlBox").style.display = "none";
-    document.getElementById("publishMessage").textContent = "修正したら、もう一度「掲載する」を押すと上書き更新されます(新しい行は増えません)。";
+    document.getElementById("publishMessage").textContent = it.canceled
+      ? "取り消し済みの記事です。掲載終了日を10年後に戻しました。「掲載する」を押すと、また表示されるようになります。"
+      : "修正したら、もう一度「掲載する」を押すと上書き更新されます(新しい行は増えません)。";
     saveDraft();
     document.querySelector('.tab-btn[data-tab="input"]').click();
-    showToast(`Vol.${it.vol} を読み込みました。修正して「掲載する」を押してください`, true);
+    showToast(it.canceled
+      ? `Vol.${it.vol} を読み込みました。「掲載する」を押すと元に戻ります`
+      : `Vol.${it.vol} を読み込みました。修正して「掲載する」を押してください`, true);
   } catch (e) {
     showToast("記事の読み込みに失敗しました: " + e.message, false);
   }
@@ -1067,7 +1109,12 @@ async function fetchNextVol() {
   try {
     const res = await fetch(`${GAS_URL}?action=next_vol`);
     const data = await res.json();
-    if (data.nextVol) {
+    if (!data.success) {
+      showToast("Vol番号を自動で取れませんでした。番号を手で入れてください。", false);
+      return;
+    }
+    // 応答が遅い間にユーザーが手入力していたら上書きしない
+    if (data.nextVol && !volNoInput.value.trim()) {
       state.volNo = data.nextVol;
       volNoInput.value = data.nextVol;
     }
