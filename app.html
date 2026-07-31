@@ -784,9 +784,11 @@ document.getElementById("publishBtn").addEventListener("click", async () => {
     showToast("GASのURLが未設定です。docs/SETUP.md の手順に従って設定してください。", false);
     return;
   }
+  // Vol番号は編集できるので、どの号を上書きするのかを確認文に明示する
+  const volForConfirm = String(state.volNo).trim().padStart(3, "0");
   const confirmMsg = state.isUpdate
-    ? "この記事を上書き更新します。スタッフへの通知は行いません。よろしいですか?"
-    : "掲載処理を実行します。実行するとスタッフ全員に通知されます。よろしいですか?";
+    ? `Vol.${volForConfirm} を上書き更新します。\n(この番号の記事が置き換わります。番号が合っているか確認してください)\nスタッフへの通知は行いません。よろしいですか?`
+    : `Vol.${volForConfirm} を掲載します。実行するとスタッフ全員に通知されます。よろしいですか?`;
   if (!confirm(confirmMsg)) return;
 
   const publishBtn = document.getElementById("publishBtn");
@@ -843,7 +845,6 @@ function enterEditMode() {
   state.published = false;
   state.isUpdate = true;
   setInputsDisabled(false);
-  volNoInput.disabled = true;            // 上書き対象を間違えないようVol番号は固定
   document.getElementById("publishBtn").disabled = false;
   document.getElementById("postPublishActions").style.display = "none";
   document.getElementById("publishMessage").textContent = "修正したら、もう一度「掲載する」を押すと上書き更新されます(新しい行は増えません)。";
@@ -1098,7 +1099,6 @@ async function editHistoryArticle(idx) {
     };
     loadDraftIntoForm();
     setInputsDisabled(false);
-    volNoInput.disabled = true;
     document.getElementById("publishBtn").disabled = false;
     document.getElementById("postPublishActions").style.display = "none";
     document.getElementById("publishedUrlBox").style.display = "none";
@@ -1203,7 +1203,7 @@ const TUTORIAL_STEPS = [
   { tab: "input", selector: "#helpBtn", title: "入力方法の早見表", text: "文字のかざり方を忘れたら、いつでもここで見られます。" },
   { tab: "preview", selector: "#previewFrame", title: "仕上がりを確認", text: "②プレビュー・掲載を押すと、この画面になります。<br>公開される見た目をそのまま確認できます。" },
   { tab: "preview", selector: "#publishBtn", title: "掲載する(公開)", text: "よければ「掲載する」を押すと公開されます。<br>押すと「スタッフ全員に通知されます。よろしいですか?」と出ます。よければ「OK」を押してください。<br><b>※今は押さないでください。</b>" },
-  { tab: "preview", selector: "#editArticleBtn", demoTarget: "#postPublishActions", title: "掲載直後に直したいとき", text: "掲載した直後なら、下に出る「この記事を修正する」でそのまま直せます(号数はそのまま)。" },
+  { tab: "preview", selector: "#editArticleBtn", demoTarget: "#postPublishActions", title: "掲載直後に直したいとき", text: "掲載した直後なら、下に出る「この記事を修正する」でそのまま直せます。<br>Vol番号も直せますが、番号を変えるとその番号の記事が置き換わります。ふだんはそのままでOKです。" },
   { tab: "history", selector: ".history-edit", waitFor: () => historyLoaded, title: "後日、直したいとき", text: "後日直したいときは、③掲載履歴から目的の記事の「この記事を修正する」を押してください。" },
   { tab: "history", selector: ".history-cancel", waitFor: () => historyLoaded, title: "載せた記事を取り消したいとき", text: "まちがえて載せた記事を引っ込めたいときは、③掲載履歴でその記事の「取り消し」を押します。<br>表示から外れて、一覧に「取り消し済み」と付きます。記事そのものは残るので、あとで「この記事を修正する」→「掲載する」で元に戻せます。" },
   { tab: "preview", selector: "#newArticleBtn", demoTarget: "#postPublishActions", title: "上書き・新しい記事", text: "直して「掲載する」を押すと上書きされます。このとき、スタッフへの通知は飛びません。<br>別の記事を新しく作るときは「新しい記事を作る」を押します。" },
