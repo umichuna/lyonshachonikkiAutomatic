@@ -802,6 +802,7 @@ document.getElementById("publishBtn").addEventListener("click", async () => {
     const payload = {
       volNo: volPadded,
       title: state.title,
+      series: (state.series || "").trim(), // スプレッドシートのタイトル欄を「社長日記Vol.XXX「シリーズ 記事タイトル」」形式にするため
       startDate: state.startDate,
       endDate: state.endDate,
       isUpdate: !!state.isUpdate,
@@ -881,6 +882,16 @@ document.getElementById("sheetLink").href = SPREADSHEET_URL;
 
 let historyItems = [];
 
+// シートのタイトル欄は「社長日記Vol.XXX「…」」形式で記録される。アプリ内では
+// Vol番号を別バッジで表示しているため、この画面での二重表示を避けて中身だけ取り出す。
+// 形式に一致しない(旧データ等)場合はそのまま表示する。
+function displayTitleFor(it) {
+  const raw = it && it.title ? it.title : "";
+  const vol = it && it.vol ? String(it.vol) : "";
+  const m = vol ? raw.match(new RegExp(`^社長日記Vol\\.${vol}「([\\s\\S]*)」$`)) : null;
+  return m ? m[1] : raw;
+}
+
 function renderHistory(items) {
   historyItems = items || [];
   const box = document.getElementById("historyBox");
@@ -899,7 +910,7 @@ function renderHistory(items) {
     // 取り消しは未取り消しの記事だけに出す(取り消し済みは修正で再掲載すれば復活できる)
     const cancel = (it.url && !canceled)
       ? `<button type="button" class="history-cancel" data-idx="${idx}">取り消し</button>` : "";
-    return `<div class="history-card${canceled ? " is-canceled" : ""}"><div class="hc-top">${vol}${badge}<span class="history-title">${escapeHtml(it.title || "(無題)")}</span></div><div class="history-actions">${open}${edit}${cancel}</div></div>`;
+    return `<div class="history-card${canceled ? " is-canceled" : ""}"><div class="hc-top">${vol}${badge}<span class="history-title">${escapeHtml(displayTitleFor(it) || "(無題)")}</span></div><div class="history-actions">${open}${edit}${cancel}</div></div>`;
   }).join("");
 }
 
@@ -917,7 +928,7 @@ async function cancelHistoryArticle(idx, btn) {
   if (!it) return;
   if (canceling) return;
   if (!GAS_URL) { showToast("GASのURLが未設定です。", false); return; }
-  if (!confirm(`Vol.${it.vol || ""}「${it.title || ""}」を取り消します。\n掲載終了日を今日にして取り下げ、一覧に「取り消し」と記録します。\n(記事のファイルは残るので、あとで「この記事を修正する」から再掲載すれば元に戻せます)\nよろしいですか?`)) return;
+  if (!confirm(`Vol.${it.vol || ""}「${displayTitleFor(it)}」を取り消します。\n掲載終了日を今日にして取り下げ、一覧に「取り消し」と記録します。\n(記事のファイルは残るので、あとで「この記事を修正する」から再掲載すれば元に戻せます)\nよろしいですか?`)) return;
   canceling = true;
   if (btn) { btn.disabled = true; btn.textContent = "取り消し中…"; }
   try {
@@ -1067,7 +1078,7 @@ function parseArticleForEdit(htmlText) {
 async function editHistoryArticle(idx) {
   const it = historyItems[idx];
   if (!it || !it.url) return;
-  if (!confirm(`Vol.${it.vol || ""}「${it.title || ""}」を修正用に読み込みます。現在入力中の内容は上書きされます。よろしいですか?`)) return;
+  if (!confirm(`Vol.${it.vol || ""}「${displayTitleFor(it)}」を修正用に読み込みます。現在入力中の内容は上書きされます。よろしいですか?`)) return;
   try {
     const res = await fetch(it.url);
     if (!res.ok) throw new Error("記事の取得に失敗しました");

@@ -222,7 +222,7 @@ function doGet(e) {
 
 /* ════════════════════════════════════════════════
    POST: 掲載処理
-   body: { volNo:"005", title:"...", startDate:"2026-07-10", endDate:"2036-07-10", html:"<!DOCTYPE ...>" }
+   body: { volNo:"005", title:"...", series:"(任意)", startDate:"2026-07-10", endDate:"2036-07-10", html:"<!DOCTYPE ...>" }
    ════════════════════════════════════════════════ */
 function doPost(e) {
   let cfg;
@@ -244,6 +244,7 @@ function doPost(e) {
 
     const volNo = String(payload.volNo || "").trim();
     const title = String(payload.title || "").trim();
+    const series = String(payload.series || "").trim();
     const startDate = isoToDate_(payload.startDate);
     const endDate = isoToDate_(payload.endDate);
     const html = String(payload.html || "");
@@ -302,6 +303,11 @@ function doPost(e) {
     const canon = getCanonicalNames_(cfg);
     const publishedUrl = `https://${canon.owner}.github.io/${canon.repo}/${filePath}`;
 
+    // シート(C列)に記録するタイトルは「社長日記Vol.XXX「シリーズ名 記事タイトル」」の形式にする
+    // (これまで手作業で掲載していたVol.001〜004と表記を揃えるため)。
+    // 通知(callNotifyGas_)やエラーメッセージには影響させないよう、素の title とは別に保持する。
+    const sheetTitle = `社長日記Vol.${volNo}「${series ? series + " " + title : title}」`;
+
     // ── 3. スプレッドシート ──
     //  更新: Vol番号一致の既存行を探し A/B/C/D を上書き(E=処理 は触らない
     //        → 処理="済" が保たれ再通知なし・行も増えない)。D(URL)は保存先変更
@@ -319,7 +325,7 @@ function doPost(e) {
             const row = i + 1;
             sheet.getRange(row, 1).setValue(startDate);    // A 更新日/開始日
             sheet.getRange(row, 2).setValue(endDate);      // B 掲載終了日
-            sheet.getRange(row, 3).setValue(title);        // C タイトル
+            sheet.getRange(row, 3).setValue(sheetTitle);   // C タイトル(社長日記Vol.XXX「…」形式)
             sheet.getRange(row, 4).setValue(publishedUrl); // D URL(保存先変更に追随)
             sheet.getRange(row, 6).setValue("");           // F 再掲載したら「取り消し」印を解除
             updated = true;
@@ -335,7 +341,7 @@ function doPost(e) {
         return jsonOut_({ success: false, error: `更新対象の行が掲載履歴に見つかりませんでした(Vol.${volNo})。記事の公開は完了しています。シートの記録は担当者にご確認ください。` });
       }
       if (!updated) {
-        sheet.appendRow([startDate, endDate, title, publishedUrl, ""]);
+        sheet.appendRow([startDate, endDate, sheetTitle, publishedUrl, ""]);
       }
     } catch (sheetErr) {
       notifyDiscord_(cfg, `⚠️ Vol.${volNo} はGitHubへの${isUpdate ? "更新" : "公開"}に成功しましたが、スプレッドシートへの記録に失敗しました。手動で確認してください。\nURL: ${publishedUrl}\nエラー: ${sheetErr.message}`);
