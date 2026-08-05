@@ -269,21 +269,45 @@ function doPost(e) {
       Accept: "application/vnd.github+json",
     };
 
-    // ── 1. 既存ファイルの有無・sha を取得(更新時は上書きに sha が必要)──
+    // ── 1. 既存ファイルの有無・sha・内容を取得(更新時は上書きに sha が必要)──
     let existingSha = null;
+    let existingContent = null; // 反応(いいね等)のARTICLE_ID引き継ぎ判定に使う
     const checkRes = UrlFetchApp.fetch(apiBase, { headers: authHeaders, muteHttpExceptions: true });
     if (checkRes.getResponseCode() === 200) {
-      existingSha = JSON.parse(checkRes.getContentText()).sha;
+      const checkJson = JSON.parse(checkRes.getContentText());
+      existingSha = checkJson.sha;
+      // 小さいファイルは content(base64)がAPIレスポンスに含まれる
+      if (checkJson.content) {
+        try { existingContent = Utilities.newBlob(Utilities.base64Decode(checkJson.content), "text/html").getDataAsString("UTF-8"); }
+        catch (e) { existingContent = null; }
+      }
     }
     // 新規掲載なのに既に存在 → 誤上書き防止で拒否
     if (existingSha && !isUpdate) {
       return jsonOut_({ success: false, error: `Vol.${volNo}(${fileName})は既に掲載済みです。修正する場合はアプリの「この記事を修正する」から操作してください。` });
     }
 
+    // 反応(いいね等)はFirestoreにVol番号ベースのIDで蓄積されるため、GitHub上に同じ
+    // ファイルが実在するとき(=通常の修正)だけ既存のARTICLE_IDを再利用して引き継ぐ。
+    // ファイルが存在しない(新規、またはGitHub上で手動削除された後の再作成)ときは、
+    // 過去の反応データを引き継がないよう必ず新しいユニークIDを発行する。
+    let canonicalArticleId = null;
+    if (existingContent) {
+      const idMatch = existingContent.match(/const ARTICLE_ID = "([^"]+)"/);
+      if (idMatch) canonicalArticleId = idMatch[1];
+    }
+    if (!canonicalArticleId) {
+      canonicalArticleId = `syacho-nikki-vol${volNo}-${Utilities.getUuid().slice(0, 8)}`;
+    }
+    let finalHtml = html;
+    if (/const ARTICLE_ID = "[^"]*"/.test(finalHtml)) {
+      finalHtml = finalHtml.replace(/const ARTICLE_ID = "[^"]*"/, `const ARTICLE_ID = "${canonicalArticleId}"`);
+    }
+
     // ── 2. GitHubへcommit(更新時は sha を付けて上書き)──
     const commitPayload = {
       message: isUpdate ? `Vol.${volNo} を更新` : `Vol.${volNo} を公開`,
-      content: Utilities.base64Encode(html, Utilities.Charset.UTF_8),
+      content: Utilities.base64Encode(finalHtml, Utilities.Charset.UTF_8),
       branch: "main",
     };
     if (existingSha) commitPayload.sha = existingSha;
