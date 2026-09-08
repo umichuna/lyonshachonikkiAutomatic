@@ -88,8 +88,30 @@ function notifyDiscord_(cfg, message) {
       muteHttpExceptions: true,
     });
   } catch (e) {
-    // 通知失敗はこれ以上握りつぶす(本処理の成否には影響させない)
+    // 通知自体は本処理の成否に影響させないためリトライしないが、実行ログには残す
+    // (Apps Scriptの実行トランスクリプト/Cloud Loggingで追跡できるようにする)。
+    console.error("Discord通知に失敗しました: " + e.message);
   }
+}
+
+// UrlFetchApp.fetch を一過性エラー(5xx・タイムアウト等)に対してリトライする(指数バックオフ)。
+// muteHttpExceptions:true の呼び出し前提で、4xxは即座に返す(リトライしても無駄なため)。
+function fetchWithRetry_(url, options, attempts, baseDelayMs) {
+  attempts = attempts || 3;
+  baseDelayMs = baseDelayMs || 2000;
+  let lastRes = null, lastErr = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = UrlFetchApp.fetch(url, options);
+      if (res.getResponseCode() < 500) return res;
+      lastRes = res;
+    } catch (e) {
+      lastErr = e;
+    }
+    if (i < attempts - 1) Utilities.sleep(baseDelayMs * Math.pow(2, i));
+  }
+  if (lastRes) return lastRes;
+  throw lastErr;
 }
 
 // ISO文字列(YYYY-MM-DD)を Date に変換。不正なら今日。
@@ -122,7 +144,7 @@ function getCanonicalNames_(cfg) {
   const cached = cache.get(cacheKey);
   if (cached) { try { return JSON.parse(cached); } catch (e) { /* 壊れていたら取り直す */ } }
   try {
-    const res = UrlFetchApp.fetch(`https://api.github.com/repos/${cfg.githubOwner}/${cfg.githubRepo}`, {
+    const res = fetchWithRetry_(`https://api.github.com/repos/${cfg.githubOwner}/${cfg.githubRepo}`, {
       headers: { Authorization: `Bearer ${cfg.githubToken}`, Accept: "application/vnd.github+json" },
       muteHttpExceptions: true,
     });
@@ -167,6 +189,63 @@ function cancelArticle_(cfg, volNo) {
   }
   if (updated > 0) return jsonOut_({ success: true, updatedRows: updated });
   return jsonOut_({ success: false, error: `Vol.${volNo} が掲載履歴に見つかりませんでした。` });
+}
+
+/* ════════════════════════════════════════════════
+   週次データ整合性チェック(makasetenet-automationのvalidate_master.pyに相当)
+   シートのURL列(D)が指す past-articles/volXXX.html が実際にGitHub上に存在するか
+   突合し、リンク切れがあればDiscordへ通知する。取り消し済み記事もファイルは
+   残す運用(SETUP.md参照)のため、F列「取り消し」の有無に関わらず全行を対象にする。
+   トリガー設置は setupWeeklyIntegrityTrigger_() を一度だけ実行する(docs/SETUP.md参照)。
+   ════════════════════════════════════════════════ */
+function validateArticleIntegrity_() {
+  const cfg = getConfig_();
+  try {
+    const sheet = getSheet_(cfg);
+    const values = sheet.getDataRange().getValues();
+    const expectedFiles = new Set();
+    for (let i = 1; i < values.length; i++) {
+      const vol = volFromUrl_(String(values[i][3] || ""));
+      if (vol) expectedFiles.add(`vol${vol}.html`);
+    }
+    if (expectedFiles.size === 0) return; // 記事がまだ無ければ何もしない
+
+    const listRes = fetchWithRetry_(
+      `https://api.github.com/repos/${cfg.githubOwner}/${cfg.githubRepo}/contents/past-articles`,
+      {
+        headers: { Authorization: `Bearer ${cfg.githubToken}`, Accept: "application/vnd.github+json" },
+        muteHttpExceptions: true,
+      }
+    );
+    if (listRes.getResponseCode() !== 200) {
+      notifyDiscord_(cfg, `⚠️ [週次整合性チェック] past-articles/ の一覧取得に失敗しました(HTTP ${listRes.getResponseCode()})。`);
+      return;
+    }
+    const actualFiles = new Set(JSON.parse(listRes.getContentText()).map((f) => f.name));
+
+    const missing = Array.from(expectedFiles).filter((f) => !actualFiles.has(f));
+    if (missing.length > 0) {
+      notifyDiscord_(
+        cfg,
+        `🚨 [週次整合性チェック] シート(掲載履歴)に記録があるのにGitHub上にファイルが見つからない記事が${missing.length}件あります: ${missing.join(", ")}`
+      );
+    }
+  } catch (e) {
+    notifyDiscord_(cfg, `⚠️ [週次整合性チェック] 実行中にエラーが発生しました: ${e.message}`);
+  }
+}
+
+// 週次整合性チェックの時間主導トリガーを設置する(初回セットアップ時に手動で1回だけ実行する関数)。
+// 既に同名の関数を呼ぶトリガーがあれば削除してから作り直すため、複数回実行しても重複しない。
+function setupWeeklyIntegrityTrigger_() {
+  ScriptApp.getProjectTriggers().forEach((t) => {
+    if (t.getHandlerFunction() === "validateArticleIntegrity_") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("validateArticleIntegrity_")
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(9)
+    .create();
 }
 
 /* ════════════════════════════════════════════════
@@ -272,7 +351,7 @@ function doPost(e) {
     // ── 1. 既存ファイルの有無・sha・内容を取得(更新時は上書きに sha が必要)──
     let existingSha = null;
     let existingContent = null; // 反応(いいね等)のARTICLE_ID引き継ぎ判定に使う
-    const checkRes = UrlFetchApp.fetch(apiBase, { headers: authHeaders, muteHttpExceptions: true });
+    const checkRes = fetchWithRetry_(apiBase, { headers: authHeaders, muteHttpExceptions: true });
     if (checkRes.getResponseCode() === 200) {
       const checkJson = JSON.parse(checkRes.getContentText());
       existingSha = checkJson.sha;
@@ -311,7 +390,7 @@ function doPost(e) {
       branch: "main",
     };
     if (existingSha) commitPayload.sha = existingSha;
-    const commitRes = UrlFetchApp.fetch(apiBase, {
+    const commitRes = fetchWithRetry_(apiBase, {
       method: "put",
       headers: authHeaders,
       contentType: "application/json",

@@ -92,6 +92,16 @@ const GAS_URL = ""; // ← ここに手順3で控えたウェブアプリのURL�
 
 ---
 
+## 4-3.(任意・推奨)週次データ整合性チェックの有効化
+
+シートの掲載履歴とGitHub上の実ファイル(`past-articles/volXXX.html`)がズレていないか(リンク切れ)を週1回自動チェックし、問題があれば`DISCORD_WEBHOOK_URL`へ通知します。
+
+1. Apps Scriptエディタで関数選択のプルダウンから **`setupWeeklyIntegrityTrigger_`** を選び、「実行」を押す(初回のみ・1回だけでOK)
+2. 以後、毎週月曜9時に自動で `validateArticleIntegrity_` が実行されます
+3. `DISCORD_WEBHOOK_URL` が未設定の場合は通知がスキップされるだけで、チェック自体はエラーになりません
+
+---
+
 ## 5. 動作確認(Vol.005での試験運用)
 
 1. `app.html` をGitHub Pages経由で開く(ローカルで確認する場合は `python3 -m http.server` を実行しブラウザで `http://localhost:8000/app.html` を開く。`file://` で直接開くとテンプレート読み込みがブロックされる場合があります)
