@@ -5,7 +5,7 @@
 > 詳細な機能説明は `README.md`、初回セットアップ手順は `docs/SETUP.md`、
 > 要件は `要件定義書.MD` を参照。このファイルは「運用状態・直近の変更・未対応事項」専用。
 
-最終更新: 2026-09-11（**下書き保存機能を追加**。詳細は「直近の修正履歴」参照。）
+最終更新: 2026-09-12（**下書き確認機能をブラウザ内完結に作り直し**。詳細は「直近の修正履歴」参照。）
 
 ## プロジェクト概要
 タイトル・本文・写真を入力するだけで社長日記のHTML記事を生成し、GitHub Pagesでの公開と
@@ -39,15 +39,15 @@ commitしつつスプレッドシートへ記録する。GitHub Actions等のCI/
 - **Vol番号の採番は「シートのタイトル列(C)のデータ行数 + 1」に依存**（`doGet`の`?action=next_vol`）。
   手動でシートの行を編集すると採番がずれる既知の脆弱性（`docs/SETUP.md`トラブルシューティング
   に記載済み）。今回のメンテナンスでは変更していない。
-- **下書き保存機能を追加（2026-09-11〜）**: `app.html`の②プレビュー・掲載画面に
-  「下書き保存」ボタンを追加。`gas/code.gs`の`doPost`に`action:"draft"`を追加し、
-  `saveDraft_`が`drafts/volXXX.html`へcommitして確認用URLのみ返す。
-  **スプレッドシートへの記録・`notifyDiscord_`/`callNotifyGas_`による通知は一切行わない**。
-  `past-articles/`とは別パスのため、正式掲載時の「既に掲載済み」重複チェック・Vol採番
-  （`?action=next_vol`はタイトル列(C)の行数依存）・週次整合性チェック
-  （`past-articles/`のみ突合）には影響しない。**下書きURLは正式な掲載ではない**
-  （スタッフ通知・シート記録なし）ため、正式掲載するには従来どおりプレビュー画面の
-  「掲載する」を押す必要がある（その場合`past-articles/volXXX.html`へ別途commitされる）。
+- **下書き確認機能（2026-09-12〜、ブラウザ内完結方式に改修）**: `app.html`の②プレビュー・
+  掲載画面に「下書き確認」ボタンがある。生成したHTMLをそのまま新しいブラウザタブに書き出す
+  だけで、**GAS・GitHub・スプレッドシートには一切アクセスしない**(通信自体が発生しない)。
+  見た目の確認やスクリーンショットでの共有が目的で、公開URLは発行されない。
+  タブを閉じると内容は残らない(保存されない・後から再アクセスできない)。
+  ※初版(2026-09-11)は`drafts/volXXX.html`へGitHub commitして確認用URLを発行する方式
+  だったが、「GASが動いていないと下書きすら確認できない」「本物のURLまでは不要、
+  見せられれば十分」というオーナーの要望により撤回し、現在の方式に置き換えた
+  （`gas/code.gs`の`action:"draft"`/`saveDraft_`、`drafts/`フォルダ運用は削除済み）。
 
 ## ファイル構成
 
@@ -57,15 +57,19 @@ commitしつつスプレッドシートへ記録する。GitHub Actions等のCI/
 | `template/article-template.html` | 記事の共通デザインテンプレート |
 | `gas/code.gs` | GASバックエンド（GitHubへのHTML登録・スプレッドシート記録・週次整合性チェック） |
 | `past-articles/` | 生成された記事HTML(`volXXX.html`)の保存先(正式掲載分) |
-| `drafts/` | 下書き保存(`action:"draft"`)のHTML保存先。シート不記録・通知なし |
 | `docs/SETUP.md` | 初回セットアップ手順（GitHub トークン・Pages・GAS デプロイ・週次チェック設置） |
 | `syachonikkigenerate.py` / `lyonshachonikkiUI.HTML` | 開発時の参考資産。**本番未使用**（削除はオーナー確認待ち） |
 
 ## 直近の修正履歴
 
-- **2026-09-11（下書き保存機能）**: オーナー依頼。`app.html`②プレビュー・掲載画面に
-  「下書き保存」ボタンを追加し、`gas/code.gs`に`action:"draft"`（`saveDraft_`）を新設。
-  `drafts/volXXX.html`へcommitし確認URLのみ返す(シート不記録・通知なし)。
+- **2026-09-12（下書き確認機能をブラウザ内完結方式に作り直し）**: オーナーから「GASが動いて
+  いなくても下書きだけは確認したい」「本物のURLまでは不要、見せられれば十分(スクショで良い)」
+  との要望を受け、`gas/code.gs`の`action:"draft"`/`saveDraft_`と`drafts/`フォルダ運用を撤回。
+  `app.html`のボタンを「下書き確認」に変更し、生成HTMLを新しいブラウザタブへ直接書き出す
+  だけ(GAS/GitHub/スプレッドシートに一切アクセスしない)に作り直した。
+- **2026-09-11（下書き保存機能・初版、後に上記へ置き換え）**: オーナー依頼。`app.html`②
+  プレビュー・掲載画面に「下書き保存」ボタンを追加し、`gas/code.gs`に`action:"draft"`
+  （`saveDraft_`）を新設。`drafts/volXXX.html`へcommitし確認URLのみ返す方式だった。
 - **2026-09-08（全体メンテナンス初回・CLAUDE.md新設）**: オーナーの依頼で全自作システムに
   自動メンテナンス体制を広げる一環として対応。①`gas/code.gs`のGitHub API呼び出し3箇所に
   `fetchWithRetry_`（指数バックオフ、3回まで）を追加。②`notifyDiscord_`の`catch`が
@@ -91,15 +95,15 @@ commitしつつスプレッドシートへ記録する。GitHub Actions等のCI/
   （`makasetenet-automation`/`aqualingua-app`のような自動デプロイの仕組みは無い）。
   `clasp`導入は本リポジトリの規模では過剰と判断し、今回は見送り。
 - **【要オーナー作業・2026-09-12発覚】GitHubトークンが401(Bad credentials)で無効化されている
-  可能性**: 下書き保存機能のテスト中に発覚。まず`action:"draft"`未対応の(貼り替え前の)
-  GASが動いていたため「titleが無いとエラー」になり(①)、title付きで再送すると実際に
-  GitHub Contents APIへcommitしにいって401が返った(②)。②は`gas/code.gs`のコードの
-  問題ではなく、スクリプトプロパティ`GITHUB_TOKEN`が無効/期限切れ/取り消し済みであることを
-  示す典型的な症状。**下書き保存に限らず通常の「掲載する」も同じトークンを使うため、
-  トークンが無効なら本番の掲載処理自体が全て失敗する状態**。対応: (1) 最新の`gas/code.gs`を
-  Apps Scriptエディタに貼り替えて再デプロイ(`action:"draft"`を有効化)、(2) GitHubで
-  Fine-grained personal access tokenを再発行(Contents: Read and write, 対象リポジトリのみ)し、
-  スクリプトプロパティ`GITHUB_TOKEN`を新しい値に更新(`docs/SETUP.md`手順1・3参照)。
+  可能性**: 下書き保存機能(初版)のテスト中に発覚した症状で、GitHub Contents APIへcommit
+  しにいった際に401が返った。`gas/code.gs`のコードの問題ではなく、スクリプトプロパティ
+  `GITHUB_TOKEN`が無効/期限切れ/取り消し済みであることを示す典型的な症状。
+  下書き確認は2026-09-12にGAS非経由の方式へ作り直したため無関係になったが、**通常の
+  「掲載する」は引き続き同じトークンを使うため、トークンが無効なら本番の掲載処理自体が
+  失敗する状態のままの可能性がある**。対応: GitHubでFine-grained personal access tokenを
+  再発行(Contents: Read and write, 対象リポジトリのみ)し、スクリプトプロパティ
+  `GITHUB_TOKEN`を新しい値に更新して再デプロイ(`docs/SETUP.md`手順1・3参照)。
+  実際に「掲載する」で再現するか未確認(オーナー未検証)。
 
 ## デプロイ手順
 

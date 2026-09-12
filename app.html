@@ -212,12 +212,12 @@ h1.app-title { font-size: 20px; font-weight: 700; text-align: center; margin-bot
 
     <div class="publish-box" id="draftBox" style="margin-top:14px;">
       <div style="font-size:13px;color:var(--ink-soft);line-height:1.7;">
-        まだ公開しないで確認だけしたいときは「下書き保存」を押してください。<br>
-        スタッフへの通知やスプレッドシートへの記録はされず、確認用のURLだけが発行されます。<br>
-        <b>この段階では正式には掲載されません。</b>正式に掲載するには、下の「掲載する」を押してください。
+        まだ公開しないで見た目だけ確認したいときは「下書き確認」を押してください。<br>
+        別タブに仕上がりが表示されます(スクリーンショットして共有する等にお使いください)。<br>
+        <b>GitHubやスプレッドシートには一切アクセスしません</b>(通知・記録もされません)。<br>
+        正式に掲載するには、上の「掲載する」を押してください。
       </div>
-      <button class="btn" id="draftSaveBtn" style="margin-top:14px;">下書き保存(確認用URLを発行)</button>
-      <div class="published-url" id="draftUrlBox" style="display:none;"></div>
+      <button class="btn" id="draftSaveBtn" style="margin-top:14px;">下書き確認(別タブで表示)</button>
     </div>
 
     <div class="line-note">不具合等ございましたらLINEにてご連絡ください。</div>
@@ -851,44 +851,24 @@ document.getElementById("publishBtn").addEventListener("click", async () => {
   }
 });
 
+// 下書き確認: GAS/GitHubには一切アクセスせず、ブラウザだけで完結する。
+// ポップアップブロック対策として、クリック直後(await前)に空タブを開いてから中身を書き込む。
 document.getElementById("draftSaveBtn").addEventListener("click", async () => {
-  if (!state.volNo) { showToast("Vol番号を入力してください。", false); return; }
-  if (!/^\d{1,4}$/.test(String(state.volNo).trim())) { showToast("Vol番号は数字で入力してください(例:5)。", false); return; }
-  if (!GAS_URL) { showToast("GASのURLが未設定です。docs/SETUP.md の手順に従って設定してください。", false); return; }
-
-  const draftBtn = document.getElementById("draftSaveBtn");
-  draftBtn.disabled = true;
-  const prevLabel = draftBtn.textContent;
-  draftBtn.textContent = "下書き保存中…";
-
+  const win = window.open("", "_blank");
   try {
     const tmpl = await loadTemplate();
     const html = generateArticleHtml(tmpl);
-    const volPadded = String(state.volNo).padStart(3, "0");
-    const res = await fetch(GAS_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "draft", volNo: volPadded, html }),
-    });
-    const data = await res.json();
-    if (!data.success) {
-      showToast(data.error || "下書き保存に失敗しました。", false);
+    if (!win) {
+      showToast("ポップアップがブロックされました。ブラウザの設定でこのサイトのポップアップを許可してください。", false);
       return;
     }
-    const urlBox = document.getElementById("draftUrlBox");
-    urlBox.style.display = "block";
-    urlBox.innerHTML = `<a href="${escapeAttr(data.url)}" target="_blank" rel="noopener">${escapeHtml(data.url)}</a>`
-      + `<p style="font-size:12px;color:var(--ink-soft);margin-top:8px;line-height:1.7;">`
-      + `※ これは下書きの確認用URLです。スプレッドシートへの記録・スタッフへの通知はまだされていません。<br>`
-      + `※ 反映まで数分かかることがあります。<br>`
-      + `※ 正式に掲載するには、上の「掲載する」を押してください(押すとスタッフ全員に通知されます)。`
-      + `</p>`;
-    showToast(`Vol.${volPadded} の下書きURLを発行しました`, true);
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    showToast("別タブに下書きを表示しました", true);
   } catch (e) {
-    showToast("通信エラーが発生しました: " + e.message, false);
-  } finally {
-    draftBtn.disabled = false;
-    draftBtn.textContent = prevLabel;
+    if (win) win.close();
+    showToast("下書き表示に失敗しました: " + e.message, false);
   }
 });
 
@@ -912,7 +892,6 @@ function startNewArticle() {
   };
   applyDateDefaults();
   document.getElementById("publishedUrlBox").style.display = "none";
-  document.getElementById("draftUrlBox").style.display = "none";
   document.getElementById("postPublishActions").style.display = "none";
   document.getElementById("publishBtn").disabled = false;
   document.getElementById("publishMessage").textContent = "プレビューをご確認いただき、修正点がなければ「掲載する」を押してください。";
