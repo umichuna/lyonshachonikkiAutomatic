@@ -5,8 +5,7 @@
 > 詳細な機能説明は `README.md`、初回セットアップ手順は `docs/SETUP.md`、
 > 要件は `要件定義書.MD` を参照。このファイルは「運用状態・直近の変更・未対応事項」専用。
 
-最終更新: 2026-09-08（**初版作成。全体メンテナンス（外部I/Oのリトライ・通知の握り潰し解消・
-週次データ整合性チェックの新設）を実施**。詳細は「直近の修正履歴」参照。）
+最終更新: 2026-09-11（**下書き保存機能を追加**。詳細は「直近の修正履歴」参照。）
 
 ## プロジェクト概要
 タイトル・本文・写真を入力するだけで社長日記のHTML記事を生成し、GitHub Pagesでの公開と
@@ -40,6 +39,15 @@ commitしつつスプレッドシートへ記録する。GitHub Actions等のCI/
 - **Vol番号の採番は「シートのタイトル列(C)のデータ行数 + 1」に依存**（`doGet`の`?action=next_vol`）。
   手動でシートの行を編集すると採番がずれる既知の脆弱性（`docs/SETUP.md`トラブルシューティング
   に記載済み）。今回のメンテナンスでは変更していない。
+- **下書き保存機能を追加（2026-09-11〜）**: `app.html`の②プレビュー・掲載画面に
+  「下書き保存」ボタンを追加。`gas/code.gs`の`doPost`に`action:"draft"`を追加し、
+  `saveDraft_`が`drafts/volXXX.html`へcommitして確認用URLのみ返す。
+  **スプレッドシートへの記録・`notifyDiscord_`/`callNotifyGas_`による通知は一切行わない**。
+  `past-articles/`とは別パスのため、正式掲載時の「既に掲載済み」重複チェック・Vol採番
+  （`?action=next_vol`はタイトル列(C)の行数依存）・週次整合性チェック
+  （`past-articles/`のみ突合）には影響しない。**下書きURLは正式な掲載ではない**
+  （スタッフ通知・シート記録なし）ため、正式掲載するには従来どおりプレビュー画面の
+  「掲載する」を押す必要がある（その場合`past-articles/volXXX.html`へ別途commitされる）。
 
 ## ファイル構成
 
@@ -48,12 +56,16 @@ commitしつつスプレッドシートへ記録する。GitHub Actions等のCI/
 | `app.html` | 入力アプリ本体（ブラウザで開くだけで動く単一HTML） |
 | `template/article-template.html` | 記事の共通デザインテンプレート |
 | `gas/code.gs` | GASバックエンド（GitHubへのHTML登録・スプレッドシート記録・週次整合性チェック） |
-| `past-articles/` | 生成された記事HTML(`volXXX.html`)の保存先 |
+| `past-articles/` | 生成された記事HTML(`volXXX.html`)の保存先(正式掲載分) |
+| `drafts/` | 下書き保存(`action:"draft"`)のHTML保存先。シート不記録・通知なし |
 | `docs/SETUP.md` | 初回セットアップ手順（GitHub トークン・Pages・GAS デプロイ・週次チェック設置） |
 | `syachonikkigenerate.py` / `lyonshachonikkiUI.HTML` | 開発時の参考資産。**本番未使用**（削除はオーナー確認待ち） |
 
 ## 直近の修正履歴
 
+- **2026-09-11（下書き保存機能）**: オーナー依頼。`app.html`②プレビュー・掲載画面に
+  「下書き保存」ボタンを追加し、`gas/code.gs`に`action:"draft"`（`saveDraft_`）を新設。
+  `drafts/volXXX.html`へcommitし確認URLのみ返す(シート不記録・通知なし)。
 - **2026-09-08（全体メンテナンス初回・CLAUDE.md新設）**: オーナーの依頼で全自作システムに
   自動メンテナンス体制を広げる一環として対応。①`gas/code.gs`のGitHub API呼び出し3箇所に
   `fetchWithRetry_`（指数バックオフ、3回まで）を追加。②`notifyDiscord_`の`catch`が

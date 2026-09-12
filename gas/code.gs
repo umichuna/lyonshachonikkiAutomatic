@@ -248,6 +248,48 @@ function setupWeeklyIntegrityTrigger_() {
     .create();
 }
 
+// 下書き保存: スプレッドシートには一切書き込まず、GitHubの drafts/volXXX.html に
+// commitして確認用URLだけを発行する(past-articles/とは別パスなので、正式掲載時の
+// 「既に掲載済み」重複チェックやVol採番・週次整合性チェックには一切影響しない)。
+// 保存のたびに同じVol番号のファイルを上書きするだけで、通知・シート記録は行わない。
+function saveDraft_(cfg, payload) {
+  const volNo = String(payload.volNo || "").trim();
+  const html = String(payload.html || "");
+  if (!volNo || !html) return jsonOut_({ success: false, error: "volNo / html は必須です。" });
+  if (!/^\d{1,4}$/.test(volNo)) return jsonOut_({ success: false, error: "Vol番号は数字で指定してください。" });
+
+  const filePath = `drafts/vol${volNo}.html`;
+  const apiBase = `https://api.github.com/repos/${cfg.githubOwner}/${cfg.githubRepo}/contents/${filePath}`;
+  const authHeaders = { Authorization: `Bearer ${cfg.githubToken}`, Accept: "application/vnd.github+json" };
+
+  let existingSha = null;
+  const checkRes = fetchWithRetry_(apiBase, { headers: authHeaders, muteHttpExceptions: true });
+  if (checkRes.getResponseCode() === 200) {
+    existingSha = JSON.parse(checkRes.getContentText()).sha;
+  }
+
+  const commitPayload = {
+    message: `下書き保存: Vol.${volNo}`,
+    content: Utilities.base64Encode(html, Utilities.Charset.UTF_8),
+    branch: "main",
+  };
+  if (existingSha) commitPayload.sha = existingSha;
+  const commitRes = fetchWithRetry_(apiBase, {
+    method: "put",
+    headers: authHeaders,
+    contentType: "application/json",
+    payload: JSON.stringify(commitPayload),
+    muteHttpExceptions: true,
+  });
+  if (commitRes.getResponseCode() >= 300) {
+    throw new Error(`下書きの保存に失敗しました(${commitRes.getResponseCode()}): ${commitRes.getContentText()}`);
+  }
+
+  const canon = getCanonicalNames_(cfg);
+  const draftUrl = `https://${canon.owner}.github.io/${canon.repo}/${filePath}`;
+  return jsonOut_({ success: true, url: draftUrl });
+}
+
 /* ════════════════════════════════════════════════
    GET: ?action=next_vol / ?action=history
    ════════════════════════════════════════════════ */
@@ -300,8 +342,11 @@ function doGet(e) {
 }
 
 /* ════════════════════════════════════════════════
-   POST: 掲載処理
-   body: { volNo:"005", title:"...", series:"(任意)", startDate:"2026-07-10", endDate:"2036-07-10", html:"<!DOCTYPE ...>" }
+   POST: 掲載処理 / 下書き保存 / 取り消し
+   body(掲載):   { volNo:"005", title:"...", series:"(任意)", startDate:"2026-07-10", endDate:"2036-07-10", html:"<!DOCTYPE ...>" }
+   body(下書き): { action:"draft", volNo:"005", html:"<!DOCTYPE ...>" }
+                 → drafts/volXXX.html にcommitし確認用URLのみ返す(シート不記録・通知なし)
+   body(取り消し): { action:"cancel", volNo:"005" }
    ════════════════════════════════════════════════ */
 function doPost(e) {
   let cfg;
@@ -319,6 +364,11 @@ function doPost(e) {
     //  GitHubのファイル・Vol番号・E列(処理)は残す(採番はずれない・再通知しない)。
     if (payload.action === "cancel") {
       return cancelArticle_(cfg, String(payload.volNo || "").trim());
+    }
+
+    // ── 下書き保存(スプレッドシート不記録・確認URL発行のみ)──
+    if (payload.action === "draft") {
+      return saveDraft_(cfg, payload);
     }
 
     const volNo = String(payload.volNo || "").trim();
