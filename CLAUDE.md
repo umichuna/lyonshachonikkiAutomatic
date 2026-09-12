@@ -90,6 +90,16 @@ commitしつつスプレッドシートへ記録する。GitHub Actions等のCI/
   Apps Scriptエディタで`Code.gs`の中身を貼り替えてデプロイし直す必要がある
   （`makasetenet-automation`/`aqualingua-app`のような自動デプロイの仕組みは無い）。
   `clasp`導入は本リポジトリの規模では過剰と判断し、今回は見送り。
+- **【要オーナー作業・2026-09-12発覚】GitHubトークンが401(Bad credentials)で無効化されている
+  可能性**: 下書き保存機能のテスト中に発覚。まず`action:"draft"`未対応の(貼り替え前の)
+  GASが動いていたため「titleが無いとエラー」になり(①)、title付きで再送すると実際に
+  GitHub Contents APIへcommitしにいって401が返った(②)。②は`gas/code.gs`のコードの
+  問題ではなく、スクリプトプロパティ`GITHUB_TOKEN`が無効/期限切れ/取り消し済みであることを
+  示す典型的な症状。**下書き保存に限らず通常の「掲載する」も同じトークンを使うため、
+  トークンが無効なら本番の掲載処理自体が全て失敗する状態**。対応: (1) 最新の`gas/code.gs`を
+  Apps Scriptエディタに貼り替えて再デプロイ(`action:"draft"`を有効化)、(2) GitHubで
+  Fine-grained personal access tokenを再発行(Contents: Read and write, 対象リポジトリのみ)し、
+  スクリプトプロパティ`GITHUB_TOKEN`を新しい値に更新(`docs/SETUP.md`手順1・3参照)。
 
 ## デプロイ手順
 
