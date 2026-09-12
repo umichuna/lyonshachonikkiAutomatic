@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>社長日記 Vol.007 ｜ Plus Pan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;700;800&family=Klee+One:wght@400;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --cream: #FAF5EB; --paper: #F4EBD9; --ink: #3A2A1E; --ink-soft: #5C463A;
+  --crust: #B8763F; --crust-dark: #8B4F1F; --berry: #C75A5A;
+  --leaf: #7A8B5E; --line: #D9C9AE; --gold: #C9A66B;
+}
+html, body {
+  background: var(--cream); color: var(--ink);
+  font-family: "Noto Sans JP", sans-serif;
+  font-size: 16px; line-height: 1.9; letter-spacing: 0.04em;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: ""; position: fixed; inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(184,118,63,0.04) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(199,90,90,0.03) 0%, transparent 50%);
+  pointer-events: none; z-index: 1;
+}
+.container { position: relative; z-index: 2; max-width: 760px; margin: 0 auto; padding: 48px 32px 80px; }
+
+/* ── マスタヘッド ── */
+.masthead { text-align: center; padding-bottom: 28px; border-bottom: 1px solid var(--line); margin-bottom: 40px; position: relative; }
+.masthead::after { content: ""; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 60px; height: 1px; background: var(--crust); }
+.brand { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 14px; }
+.brand-mark { width: 36px; height: 36px; flex-shrink: 0; }
+.brand-name { font-family: "Cormorant Garamond", serif; font-size: 22px; font-style: italic; letter-spacing: 0.15em; color: var(--crust-dark); }
+.brand-name span { font-family: "Shippori Mincho", serif; font-style: normal; font-size: 13px; letter-spacing: 0.3em; color: var(--ink-soft); margin-left: 6px; }
+.masthead-title { font-family: "Shippori Mincho", serif; font-size: 38px; font-weight: 800; letter-spacing: 0.18em; color: var(--ink); line-height: 1.2; }
+.masthead-meta { margin-top: 14px; font-family: "Cormorant Garamond", serif; font-style: italic; font-size: 18px; color: var(--ink-soft); letter-spacing: 0.12em; }
+.masthead-meta .vol { color: var(--berry); font-weight: 500; margin: 0 10px; }
+
+/* ── 記事タイトル ── */
+.article-header { text-align: center; margin-bottom: 44px; }
+.article-kicker { display: inline-block; font-family: "Klee One", cursive; font-size: 13px; color: var(--berry); background: rgba(199,90,90,0.08); padding: 4px 16px; border-radius: 20px; margin-bottom: 18px; letter-spacing: 0.1em; }
+.article-main-title { font-family: "Shippori Mincho", serif; font-size: 28px; font-weight: 700; line-height: 1.6; color: var(--ink); margin-bottom: 8px; }
+.article-subtitle { font-family: "Cormorant Garamond", serif; font-style: italic; font-size: 15px; color: var(--ink-soft); letter-spacing: 0.08em; }
+/* 日本語サブタイトルは斜体をやめて明朝で表示 */
+.article-subtitle.jp { font-family: "Shippori Mincho", serif; font-style: normal; font-size: 14px; letter-spacing: 0.12em; }
+
+/* ── セクション ── */
+.section { margin-bottom: 48px; }
+.section-heading { display: flex; align-items: center; gap: 10px; font-family: "Shippori Mincho", serif; font-size: 19px; font-weight: 700; color: var(--ink); margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--line); position: relative; }
+.section-heading::after { content: ""; position: absolute; bottom: -1px; left: 0; width: 48px; height: 2px; background: var(--crust); }
+.section-icon { font-size: 20px; flex-shrink: 0; }
+.section-body { font-family: "Shippori Mincho", serif; font-size: 16px; line-height: 2.1; color: var(--ink); }
+.section-body p { margin-bottom: 1.4em; text-align: justify; }
+.section-body p:last-child { margin-bottom: 0; }
+
+/* ── テキスト装飾 ── */
+/* **太字** */
+.t-bold { font-weight: 700; }
+/* __下線__ */
+.t-under { text-decoration: underline; text-underline-offset: 3px; }
+/* ==マーカー== */
+.t-mark { background: linear-gradient(transparent 60%, rgba(201,166,107,0.35) 60%); font-weight: 500; }
+/* >> 引用ブロック */
+.quote-block { margin: 32px 0; padding: 28px 24px; background: var(--paper); border: 1px solid var(--line); border-top: 3px solid var(--crust); border-radius: 2px; text-align: center; }
+.quote-block .quote-main { font-family: "Shippori Mincho", serif; font-size: 26px; font-weight: 800; color: var(--crust-dark); letter-spacing: 0.1em; line-height: 1.6; display: block; margin-bottom: 8px; }
+.quote-block .quote-sub { font-family: "Klee One", cursive; font-size: 13px; color: var(--ink-soft); letter-spacing: 0.1em; }
+/* ## 見出し（セクション内h4）*/
+.section-body h4 { font-family: "Shippori Mincho", serif; font-size: 17px; font-weight: 700; color: var(--crust-dark); margin: 28px 0 12px; padding-left: 12px; border-left: 3px solid var(--crust); }
+
+/* ── 写真 ── */
+.photo-block { margin: 28px -8px 28px; }
+.photo-block img { width: 100%; height: auto; display: block; border-radius: 2px; box-shadow: 0 6px 24px rgba(58,42,30,0.16); }
+.photo-block figcaption { text-align: center; font-family: "Klee One", cursive; font-size: 12px; color: var(--ink-soft); margin-top: 10px; letter-spacing: 0.08em; }
+
+/* ── 区切り・章末 ── */
+.ornament { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 40px 0; color: var(--crust); }
+.ornament::before, .ornament::after { content: ""; height: 1px; flex: 1; background: linear-gradient(90deg, transparent, var(--line), transparent); }
+.chapter-end { text-align: center; margin: 8px 0 40px; font-family: "Cormorant Garamond", serif; font-style: italic; font-size: 15px; color: var(--ink-soft); letter-spacing: 0.2em; }
+
+/* ── 署名 ── */
+.signature { text-align: right; margin-top: 44px; padding-top: 24px; border-top: 1px dashed var(--line); }
+.signature-role { font-family: "Klee One", cursive; font-size: 13px; color: var(--ink-soft); letter-spacing: 0.1em; margin-bottom: 6px; }
+.signature-name { font-family: "Shippori Mincho", serif; font-size: 22px; font-weight: 500; color: var(--ink); letter-spacing: 0.2em; }
+
+/* ── リアクション ── */
+.reaction-section { margin-top: 56px; padding: 32px 28px; background: var(--paper); border-radius: 8px; border: 1px solid var(--line); text-align: center; }
+.reaction-title { font-family: "Klee One", cursive; font-size: 14px; color: var(--ink-soft); letter-spacing: 0.06em; margin-bottom: 24px; word-break: keep-all; }
+.reaction-title span { color: var(--crust); }
+.reaction-buttons { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+.reaction-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; background: var(--cream); border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 20px; cursor: pointer; transition: all 0.2s ease; min-width: 72px; font-family: inherit; }
+.reaction-btn:hover { border-color: var(--crust); background: #fff; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(184,118,63,0.15); }
+.reaction-btn.reacted { border-color: var(--crust); background: rgba(184,118,63,0.08); }
+.reaction-btn.reacted .reaction-emoji { transform: scale(1.15); }
+.reaction-emoji { font-size: 28px; line-height: 1; transition: transform 0.15s ease; display: block; }
+.reaction-label { font-family: "Klee One", cursive; font-size: 11px; color: var(--ink-soft); letter-spacing: 0.06em; }
+.reaction-count { font-family: "Shippori Mincho", serif; font-size: 18px; font-weight: 700; color: var(--crust-dark); min-height: 24px; }
+.reaction-note { margin-top: 18px; font-family: "Klee One", cursive; font-size: 11px; color: var(--ink-soft); opacity: 0.7; }
+
+/* ── フッター ── */
+.footer { margin-top: 40px; padding-top: 28px; border-top: 1px solid var(--line); text-align: center; }
+.footer-tag { font-family: "Shippori Mincho", serif; font-size: 17px; font-weight: 500; color: var(--crust-dark); letter-spacing: 0.18em; line-height: 2.0; }
+.footer-stores { margin-top: 10px; font-family: "Klee One", cursive; font-size: 12px; color: var(--ink-soft); }
+.footer-stores span { color: var(--crust-dark); margin: 0 4px; }
+
+/* ── アニメーション ── */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.4); } 70% { transform: scale(0.9); } 100% { transform: scale(1.15); } }
+.pop-anim { animation: pop 0.35s ease forwards; }
+.masthead { animation: fadeUp 0.7s ease-out backwards; }
+.article-header { animation: fadeUp 0.7s 0.1s ease-out backwards; }
+.section { animation: fadeUp 0.7s 0.2s ease-out backwards; }
+
+/* ── レスポンシブ ── */
+@media (max-width: 600px) {
+  .container { padding: 28px 18px 56px; }
+  .masthead-title { font-size: 28px; }
+  .article-main-title { font-size: 22px; }
+  .section-body { font-size: 15px; }
+  .photo-block { margin: 20px 0; }
+  .quote-block .quote-main { font-size: 21px; }
+  .reaction-buttons { gap: 10px; }
+  .reaction-btn { min-width: 60px; padding: 12px 14px; }
+  .reaction-emoji { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ── マスタヘッド ── -->
+  <header class="masthead">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 40 40" fill="none">
+        <ellipse cx="20" cy="22" rx="14" ry="11" fill="#B8763F" opacity="0.9"/>
+        <ellipse cx="20" cy="20" rx="14" ry="11" fill="#D89456"/>
+        <path d="M14 18 Q20 14 26 18" stroke="#8B4F1F" stroke-width="1.2" fill="none"/>
+        <path d="M14 22 Q20 18 26 22" stroke="#8B4F1F" stroke-width="1.2" fill="none"/>
+        <path d="M20 6 L20 12 M18 8 L20 6 L22 8" stroke="#7A8B5E" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div class="brand-name">Plus Pan<span>株式会社プラスパン</span></div>
+    </div>
+    <h1 class="masthead-title">社 長 日 記</h1>
+    <div class="masthead-meta">
+      <span>Vol.</span><span class="vol">007</span><span>—</span>&nbsp;2026.09.12&nbsp;<span>—</span>
+    </div>
+  </header>
+
+  <!-- ── 記事タイトル ── -->
+  <div class="article-header">
+    
+    <h2 class="article-main-title">「これからも『美味しい!』を届け続けるために」</h2>
+    <div class="article-subtitle jp">— 賃上げと、みんなで考えたい生産性の話 —</div>
+  </div>
+
+  <!-- ── 本文 ── -->
+    <section class="section">
+    <h3 class="section-heading"><span class="section-icon">1.</span>はじめに</h3>
+    <div class="section-body">
+      <p>いつもプラスパンを支えてくれている皆さん、<span class="t-bold">本当にありがとうございます。</span>前回の社長日記では、妻が「ひよこクラブ」に投稿していた相談の内容と、そこから独立を決意していく話を次回お伝えすると予告しました。楽しみにしてくださっていた方、ごめんなさい。今回は少しだけ寄り道をさせてください。<span class="t-bold"><span class="t-under">その続きは次回Vol.8でお伝えしたいと思います。</span></span></p>
+      <p>今日は、今のプラスパンで働く皆さんと、これからの会社のために、大切な話をしたいと思います。テーマは<span class="t-bold"><span class="t-under"><span class="t-mark">「賃金」と「生産性」</span></span></span>です。</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-heading"><span class="section-icon">2.</span>9月から、時給を一律90円引き上げました</h3>
+    <div class="section-body">
+      <p>プラスパンでは、<span class="t-bold"><span class="t-mark">9月から時給を一律90円引き上げました</span></span>。現在のプラスパンの事業内最低賃金は時給1,330円です。10月1日から東京都の最低賃金は1,280円になりますが、その改定後も50円高い水準になります。</p>
+      <p>今回の賃上げは、最低賃金の改定への対応だけでなく、これからのプラスパンを考えたうえでの決断です。私には、皆さんと一緒に目指したい目標があります。</p>
+      <div class="quote-block"><span class="quote-main">2035年までに、近隣の同業他社より<span class="t-bold">20％高い賃金</span>を払える会社を目指す！</span></div>
+      <p>簡単な目標ではありません。でも、そのくらい、働いてくれている皆さんの待遇を良くしていきたいと思っています。<span class="t-bold"><span class="t-mark">「プラスパンで働いていてよかった」「ここで働いていることを、家族や友人に誇れる」</span></span>——そんな会社にしたいのです。</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-heading"><span class="section-icon">3.</span>私が悲しくなる、ある未来</h3>
+    <div class="section-body">
+      <p>私はこれから先、人材の確保が今以上に難しくなることを心配しています。今、プラスパンには<span class="t-bold">年間40万人以上のお客様</span>が来てくださっています。そのお客様に、人手が足りないという理由で、美味しいパンを届けられなくなる。そんな未来を想像すると、とても悲しくなります。</p>
+      <p>Vol.2でも書きましたが、私がパン屋を目指すきっかけになったのは、16歳のときに初めて作ったバターロールでした。それを<span class="t-bold">食べた父と母が言ってくれた「美味しい！」</span>というたったひと言です。今、その「美味しい！」を毎日たくさんのお客様に届けられているのは、作ってくれる人、販売してくれる人、準備や片付けをしてくれる人、会社を支えてくれる人がいるからです。だからこそ、今いる皆さんに長く働いてもらいたい。<span class="t-mark">賃金を上げていきたいという思いの先には、働く人を大切にしながら、地域のお客様にパンを届け続けたいという願いがあります。</span></p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-heading"><span class="section-icon">4.</span>生産性は、「もっと忙しく働くこと」ではありません</h3>
+    <div class="section-body">
+      <p>ただ、経営者として正直にお伝えしたい心配もあります。売上や仕事のやり方が変わらないまま人件費が増えれば、その分、会社に残る利益は少なくなります。賃金を上げることと、その賃金を払い続けられる会社にすること。その両方に責任を持ちたい。だから私は、<span class="t-bold"><span class="t-under">皆さんと「生産性」を考えていきたいと思っています。</span></span></p>
+      <p>でも、ここは誤解してほしくありません。「90円上げたのだから、<span class="t-under">その分もっと働いてください</span>」という話ではありません。前回の日記で書いた、朝5時出勤・夜9時帰宅の経験を振り返る今、皆さんに同じような無理を求めたいとは思っていません。</p>
+      <div class="quote-block"><span class="quote-main">人・時間・材料を大切に使い、無駄を減らして、同じ時間の中でお客様の「美味しい！」と「また来たい！」を今よりもっと増やすこと。</span></div>
+      <p><span class="t-bold"><span class="t-mark">その積み重ねを、会社に残る利益と、働く皆さんへの還元につなげていきたいのです。</span></span></p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-heading"><span class="section-icon">5.</span>「チャンスロスを減らす」と「作りすぎを減らす」</h3>
+    <div class="section-body">
+      <p>作りすぎを減らすことは大切です。材料も、パンを作る時間も、仲間の頑張りも、無駄にはしたくありません。でも、ロスばかりを気にして追加を控え、夕方の売り場に商品がほとんどなかったら——仕事帰りに寄ってくださったお客様が「食べたかったパンがないな」と感じて帰ってしまうかもしれません。</p>
+      <p>ロスを減らすことは、ただ作らないことではありません。同じように、<span class="t-mark">チャンスロスを減らすことも、ただたくさん作ることではありません。</span>今何が売れているのか。次の商品は何時に売り場へ出せるのか。製造と販売で情報を伝え合い、必要な商品を、必要な時間に、必要な量だけ用意する。その判断の精度を、少しずつ高めていきたいと思っています。</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-heading"><span class="section-icon">6.</span>「また来たい！」は、毎日の小さな行動から</h3>
+    <div class="section-body">
+      <p>生産性は、製造だけの話ではありません。お客様が困っていたら気づいて声をかける。お会計が終わったお客様にも、最後まで気持ちよく帰っていただく。例えば、お客様がトレーに載せているパンの焼きたてが出たら「焼きたてが出来ました。よろしければこちらにお取り替えしましょうか？」と一声かける。こうした小さな気配りも、私たちの大切な仕事です。</p>
+      <p>Vol.6では「接客もパンの美味しさのひとつ」と書きました。目の前の作業に集中することは大切です。でも、時々顔を上げて、その先にいるお客様へ意識を向けてみてください。<span class="t-under">私たちの仕事の目的は、作業を終えることではなく、お客様に喜んでいただくことだからです。</span></p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-heading"><span class="section-icon">7.</span>「自分の担当」から、「お店全体」へ</h3>
+    <div class="section-body">
+      <p>明日の準備をしているときに、今日お客様にお出しするパンの製造が遅れていたとします。「私は明日の準備担当だから」と自分の仕事だけを続けるのではなく、「今日の分が間に合っていないようですが、先にこちらを手伝いましょうか？」と店長や仲間に声をかけてほしいのです。</p>
+      <p>黙って仕事を変えるのではなく、店全体で優先順位を確かめ、必要なところへ力を合わせる。その判断の中心には、今日来てくださっているお客様がいます。「この商品が足りなくなりそうです」「今日はこちらのパンがよく売れています」——そうした声が行き交えば、助け合えることも先回りできることも増えていきます。<span class="t-mark">困りごとや改善案は、抱え込まずに店長へ伝えてください。</span></p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-heading"><span class="section-icon">8.</span>会社も、仕事のやり方を見直します</h3>
+    <div class="section-body">
+      <p>ここまで、皆さんにお願いしたいことを書いてきました。でも、生産性向上を、皆さんの気遣いや頑張りだけに頼るつもりはありません。Vol.5でお伝えした<span class="t-under">「矢印を自分に向ける」という姿勢。</span>人に求める前に、自分の関わり方を見直すことは、今の私にとっても大切な考え方です。</p>
+      <p>道具を探す時間が多い。作業場所が使いにくい。同じことを何度もやり直している。そんな仕事があれば<span class="t-bold">「もっと頑張って」で済ませず、やり方や環境から考えたいと思っています。</span>必要な設備があれば購入を検討し、必要であれば店舗や工場の改装も検討します。</p>
+      <div class="quote-block"><span class="quote-main">「ここが大変です」「こんな設備があると助かります」「こう変えたら、お客様にも仲間にも喜んでもらえると思います」——ぜひ、皆さんの声を聞かせてください。</span></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-heading"><span class="section-icon">9.</span>効率の先に、もっと美味しいパンを</h3>
+    <div class="section-body">
+      <p>これからは、さまざまなパンコンテストにも挑戦し、入賞を目指していきたいと思っています。効率だけを追いかけて、美味しさや技術へのこだわりがなくなる会社にはしたくありません。むしろ、無駄を減らして生まれた時間や余裕を、もっと良い商品づくりやお客様への気配りにつなげていきたい。</p>
+      <div class="quote-block"><span class="quote-main">「このパン、私が作っているんです」「これは、うちの自慢の商品です」</span></div>
+      <p>そう胸を張って話せる商品を、みんなで増やしていきたいのです。<span class="t-mark">効率が良い。でも、温かい。そして、パンが美味しい。</span>そんなプラスパンを目指したいと思っています。</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-heading"><span class="section-icon">10.</span>みんなの頑張りが、もっと報われる会社へ</h3>
+    <div class="section-body">
+      <p>私が目指しているのは、皆さんを今以上に忙しくする会社ではありません。品質や安全、必要な休憩を犠牲にせず、お客様に喜んでいただきながら、働く人も自分や家族の時間を大切にできる会社です。そのために、会社も変わります。私自身も、仕事のやり方や皆さんとの関わり方を見直していきます。</p>
+      <p>チャンスロスを減らす。作りすぎを減らす。そして、「また来たい！」を増やす。気づいたことを伝え合い、仲間と助け合い、お客様へ意識を向ける。一人ひとりの小さな行動を、会社全体の力にしていきたいと思います。</p>
+      <div class="quote-block"><span class="quote-main">2035年までに、近隣の同業他社より20％高い賃金を払える会社を目指す。</span></div>
+      <p>その目標は、働く皆さんに誇りを持ってもらい、これからも地域のお客様に美味しいパンを届け続けるための目標です。10年後も、20年後も——</p>
+      <div class="quote-block"><span class="quote-main">「やっぱりリヨンのパンは美味しいね！」</span></div>
+      <p>そう言っていただけるように。みんなで、もっと良いプラスパンをつくっていきましょう。いつも本当にありがとうございます。</p>
+      <div class="quote-block"><span class="quote-main">次回Vol.8では、「ひよこクラブ」の続きと独立への決意をお伝えします。ぜひ次回も読んでください！</span></div>
+    </div>
+  </section>
+
+  <!-- ── 章末 ── -->
+  
+
+  <!-- ── 署名 ── -->
+  <div class="signature">
+    <div class="signature-role">株式会社プラスパン　代表取締役</div>
+    <div class="signature-name">滝 沢 光 男</div>
+  </div>
+
+  <!-- ── リアクション ── -->
+  <div class="reaction-section">
+    <div class="reaction-title">この記事を読んで、どう感じましたか？<br><span>スタンプで気持ちを伝えてみてください ✦</span></div>
+    <div class="reaction-buttons">
+      <button class="reaction-btn" data-key="like"><span class="reaction-emoji">👍</span><span class="reaction-label">いいね</span><span class="reaction-count" id="count-like">0</span></button>
+      <button class="reaction-btn" data-key="love"><span class="reaction-emoji">❤️</span><span class="reaction-label">好き</span><span class="reaction-count" id="count-love">0</span></button>
+      <button class="reaction-btn" data-key="smile"><span class="reaction-emoji">😊</span><span class="reaction-label">いい話</span><span class="reaction-count" id="count-smile">0</span></button>
+      <button class="reaction-btn" data-key="ganbaro"><span class="reaction-emoji">💪</span><span class="reaction-label">頑張るぞ</span><span class="reaction-count" id="count-ganbaro">0</span></button>
+      <button class="reaction-btn" data-key="study"><span class="reaction-emoji">📖</span><span class="reaction-label">勉強になった</span><span class="reaction-count" id="count-study">0</span></button>
+    </div>
+    <div class="reaction-note">※ 1人1回押せます　数はみんなで共有されます</div>
+  </div>
+
+  <!-- ── フッター ── -->
+  <footer class="footer">
+    <div class="footer-tag">毎日ありがとう。<br>あなたたちがいるから、おいしいパンが生まれる。</div>
+    <div class="footer-stores">
+      <span>リヨンコッペル</span>／<span>リヨンスイーツ</span>／<span>リヨンソレイユ</span>／<span>リヨンコッペ館</span>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ── Firebase リアクション ── -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyChFwAKFVBJJYA3epZA225W2fJaFz-g5QQ",
+    authDomain: "shachonikki-pluspan-6a1ea.firebaseapp.com",
+    projectId: "shachonikki-pluspan-6a1ea",
+    storageBucket: "shachonikki-pluspan-6a1ea.firebasestorage.app",
+    messagingSenderId: "825273470950",
+    appId: "1:825273470950:web:a72da254d51e53b17b5027"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // ★ Vol番号ごとに自動で変わる（混在防止）
+  const ARTICLE_ID = "syacho-nikki-vol007-062f5630";
+  const KEYS = ["like", "love", "smile", "ganbaro", "study"];
+  const LOCAL_KEY = "reaction_" + ARTICLE_ID;
+
+  function getMyReactions() { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || "{}"); } catch(e) { return {}; } }
+  function setMyReaction(key, val) { const r = getMyReactions(); r[key] = val; localStorage.setItem(LOCAL_KEY, JSON.stringify(r)); }
+
+  const countRef = doc(db, "reactions", ARTICLE_ID);
+  onSnapshot(countRef, (snap) => {
+    const data = snap.exists() ? snap.data() : {};
+    KEYS.forEach(key => { const el = document.getElementById("count-" + key); if (el) el.textContent = data[key] || 0; });
+  });
+
+  async function handleReaction(btn) {
+    const key = btn.dataset.key;
+    const alreadyReacted = btn.classList.contains("reacted");
+    const snap = await getDoc(countRef);
+    const data = snap.exists() ? snap.data() : {};
+    let count = data[key] || 0;
+    if (alreadyReacted) { count = Math.max(0, count - 1); btn.classList.remove("reacted"); setMyReaction(key, false); }
+    else { count += 1; btn.classList.add("reacted"); setMyReaction(key, true); const emoji = btn.querySelector(".reaction-emoji"); emoji.classList.remove("pop-anim"); void emoji.offsetWidth; emoji.classList.add("pop-anim"); }
+    await setDoc(countRef, { ...data, [key]: count }, { merge: true });
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    const mine = getMyReactions();
+    KEYS.forEach(key => {
+      const btn = document.querySelector("[data-key='" + key + "']");
+      if (!btn) return;
+      if (mine[key]) btn.classList.add("reacted");
+      btn.addEventListener("click", () => handleReaction(btn));
+    });
+  });
+</script>
+</body>
+</html>
